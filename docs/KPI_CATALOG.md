@@ -2,14 +2,24 @@
 
 Estas definições são propostas técnicas e precisam de validação com uma amostra real do Newsoft e com o responsável de negócio.
 
+A implementação viva está em `src/modules/kpis/domain/catalog.ts`, com a versão da definição de cada KPI. Este documento é o registo da discussão; o código é a fonte de verdade.
+
+**Estado a partir da Fase 3**: os KPIs de agenda estão ativos e calculados. Nenhum tem ainda `definitionApproved: true` — o ecrã marca-os como "definição provisória". Os financeiros e os de pacientes continuam bloqueados, por falta de definição de negócio e de amostras validadas.
+
+## Denominador das taxas de agenda (v1, D-019)
+
+As três taxas partilham o mesmo denominador: **consultas com desfecho conhecido**, ou seja realizadas + faltas + canceladas. As consultas ainda por realizar ficam de fora, para que olhar para o mês corrente a meio do mês não mostre uma taxa de realização artificialmente baixa. As remarcadas não entram em nenhum total: contam na data para onde foram movidas.
+
+Consequência útil: as três taxas somam 100%.
+
 | Chave | Nome | Fórmula proposta | Estado |
 |---|---|---|---|
-| `appointments_scheduled` | Consultas agendadas | contagem de consultas no período segundo estados incluídos | confirmar estados |
-| `appointments_completed` | Consultas realizadas | contagem com estado normalizado `COMPLETED` | confirmar mapeamento |
-| `completion_rate` | Taxa de realização | realizadas / agendadas elegíveis | confirmar denominador |
-| `no_show_count` | Faltas | contagem com estado `NO_SHOW` | confirmar mapeamento |
-| `no_show_rate` | Taxa de faltas | faltas / agendadas elegíveis | confirmar denominador |
-| `cancellation_rate` | Taxa de cancelamento | canceladas / agendadas elegíveis | confirmar estados |
+| `appointments_scheduled` | Consultas agendadas | contagem no período, exceto remarcadas | **ativo** v1, por aprovar |
+| `appointments_completed` | Consultas realizadas | contagem com estado `COMPLETED` | **ativo** v1, por aprovar |
+| `completion_rate` | Taxa de realização | realizadas / (realizadas + faltas + canceladas) | **ativo** v1, por aprovar |
+| `no_show_count` | Faltas | contagem com estado `NO_SHOW` | **ativo** v1, por aprovar |
+| `no_show_rate` | Taxa de faltas | faltas / (realizadas + faltas + canceladas) | **ativo** v1, por aprovar |
+| `cancellation_rate` | Taxa de cancelamento | canceladas / (realizadas + faltas + canceladas) | **ativo** v1, por aprovar |
 | `new_patients` | Novos pacientes | identificadores com primeira consulta elegível no período | confirmar definição Newsoft |
 | `active_patients` | Pacientes ativos | definição da fonte à data de referência | bloqueado até definição |
 | `active_without_booking` | Ativos sem marcação | ativos sem consulta futura elegível | bloqueado até definição |

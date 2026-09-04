@@ -13,6 +13,11 @@ Newsoft — essa só será mapeada na Fase 4, a partir de uma amostra anonimizad
 | `agenda-com-erros.csv` | data inexistente, data em falta, estado por mapear, clínica e médico desconhecidos, duração não numérica |
 | `agenda-com-repetidas.csv` | linha repetida dentro do próprio ficheiro |
 | `agenda-valida.xlsx` | mesmo conteúdo do CSV válido, em Excel, com duas folhas |
+| `agenda-dashboard.csv` | contagens conhecidas para o e2e do dashboard: janeiro de 2025 com 2 realizadas, 1 falta, 1 cancelada e 1 por realizar, mais 1 realizada em dezembro de 2024 para a comparação |
+
+Cada spec e2e usa a sua própria fixture: partilhar uma faria a segunda importação
+ser recusada como duplicada, e o teste falharia por uma razão que não é a que
+está a testar.
 
 O `.xlsx` é gerado por `npx tsx tests/fixtures/generate-xlsx.ts` (binário, por isso
 não é editável à mão).

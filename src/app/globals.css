@@ -24,3 +24,38 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * Paleta de visualização de dados.
+ *
+ * Quatro primeiras cores da paleta categórica, em ordem fixa (nunca ciclada),
+ * com passos próprios para o tema escuro — não é uma inversão automática.
+ * Validadas nos dois modos: banda de luminosidade, croma, separação para
+ * daltonismo (pior par adjacente ΔE 9.1 claro / 8.4 escuro) e contraste.
+ *
+ * Em tema claro o aqua e o amarelo ficam abaixo de 3:1 contra a superfície:
+ * aplica-se a regra de alívio — o gráfico traz sempre legenda e uma tabela com
+ * os valores exatos, para a identidade nunca depender só da cor.
+ */
+.viz-root {
+  --series-1: #2a78d6; /* azul */
+  --series-2: #eb6834; /* laranja */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #eda100; /* amarelo */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .viz-root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+  }
+}
+
+:root[data-theme="dark"] .viz-root {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+}

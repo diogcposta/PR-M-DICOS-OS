@@ -21,10 +21,18 @@
 | D-017 | Estado da origem sem mapeamento é erro de linha, nunca convertido em `UNKNOWN`: um estado por mapear falsearia a taxa de faltas | aceite |
 | D-018 | Clínica ou médico desconhecidos são erro de linha, não criação automática de entidades | aceite |
 
-## Dúvidas por resolver antes da Fase 3
+| D-019 | Denominador das taxas de agenda = consultas com desfecho conhecido (realizadas + faltas + canceladas). Exclui as que ainda estão por acontecer, para um período em curso não mostrar uma taxa de realização artificialmente baixa | aceite (Fase 3), **por validar com o negócio** |
+| D-020 | Consultas remarcadas não contam em nenhum total: a consulta conta na data para onde foi movida | aceite (Fase 3) |
+| D-021 | Comparação: contagens em variação relativa, percentagens em pontos percentuais — dizer que uma taxa "subiu 50%" ao passar de 10% para 15% seria ambíguo | aceite |
+| D-022 | KPIs ativos trazem `definitionApproved: false` até validação do negócio; o ecrã marca-os como "definição provisória" e mostra o que falta decidir | aceite |
+| D-023 | Filtros do dashboard vivem no URL (formulário GET), não no estado React: um dashboard filtrado é partilhável e sobrevive ao refresh | aceite |
+| D-024 | Gráfico em SVG próprio, sem biblioteca de charts: uma série empilhada e um eixo não justificam a dependência | aceite |
 
+## Dúvidas por resolver
+
+- **Validação das fórmulas de agenda**: as definições de D-019 a D-021 estão implementadas e testadas, mas foram decididas por nós. Precisam de confirmação do responsável de negócio antes de `definitionApproved` passar a `true`.
 - **Definições de negócio**: "ativo", "inativo", "perdido" e "reativado" continuam sem definição aprovada. Os KPIs correspondentes estão bloqueados no catálogo.
-- **Denominadores**: taxa de realização, de faltas e de cancelamento partilham denominador? Consultas canceladas com antecedência entram na base?
+- **Cancelamentos**: cancelamento pela clínica e pelo paciente contam da mesma forma na taxa? Hoje sim.
 - **Produção vs. faturação**: que data usar em cada facto e como tratar reversões e notas de crédito.
 - **Amostras reais**: nenhum mapeamento de colunas do Newsoft pode ser fechado antes de recebermos exportações anonimizadas de cada área (10–30 linhas, sem dados pessoais). O perfil `agenda-sintetica` v1 é um andaime, não o mapeamento definitivo.
 - **Correção de um lote confirmado**: hoje um lote `COMMITTED` é terminal e corrige-se importando um novo ficheiro. Falta decidir se é preciso anular um lote e o que fazer aos factos que ele criou.

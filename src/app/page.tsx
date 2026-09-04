@@ -1,22 +1,31 @@
-import { Badge } from "@/components/ui/Badge";
-import { Card } from "@/components/ui/Card";
+import Link from "next/link";
+
+import { DashboardFilters } from "@/components/dashboard/DashboardFilters";
+import { KpiCard } from "@/components/dashboard/KpiCard";
+import { MonthlyAppointmentsChart } from "@/components/dashboard/MonthlyAppointmentsChart";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { getAppointmentDashboard } from "@/modules/kpis/application/get-appointment-dashboard";
+import {
+  formatPeriodLabel,
+  parseDashboardFilters,
+} from "@/modules/kpis/application/parse-dashboard-filters";
+import { APPOINTMENT_KPI_KEYS, findKpiDefinition } from "@/modules/kpis/domain/catalog";
 import { getCurrentOrganization } from "@/modules/organizations/application/get-current-organization";
-import { getDashboardSummary } from "@/modules/kpis/application/get-dashboard-summary";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const organization = await getCurrentOrganization();
 
   if (!organization) {
     return (
       <div className="space-y-8">
-        <PageHeader
-          title="Dashboard"
-          description="Indicadores por período, clínica e médico, com comparação com o período anterior."
-        />
+        <PageHeader title="Dashboard" description="Indicadores de agenda por período, clínica e médico." />
         <EmptyState
           title="Nenhuma organização configurada"
           description="A base de dados está vazia. Execute `npm run db:seed` para criar a organização sintética de desenvolvimento."
@@ -25,66 +34,154 @@ export default async function DashboardPage() {
     );
   }
 
-  const summary = await getDashboardSummary(organization.id);
+  const rawParams = await searchParams;
+  const flatParams: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(rawParams)) {
+    flatParams[key] = Array.isArray(value) ? value[0] : value;
+  }
+
+  const filters = parseDashboardFilters(flatParams, new Date(), organization.timezone);
+  const dashboard = await getAppointmentDashboard({
+    organizationId: organization.id,
+    fromDate: filters.fromDate,
+    toDate: filters.toDate,
+    clinicId: filters.clinicId,
+    practitionerId: filters.practitionerId,
+    timeZone: organization.timezone,
+  });
+
+  const periodLabel = formatPeriodLabel(filters.fromDate, filters.toDate);
+  const previousLabel = formatPeriodLabel(
+    dashboard.comparisonPeriod.fromDate,
+    dashboard.comparisonPeriod.toDate,
+  );
+
+  const chartPoints = dashboard.monthly.map((point) => ({
+    month: point.month,
+    completed: point.counts.COMPLETED,
+    noShow: point.counts.NO_SHOW,
+    cancelled: point.counts.CANCELLED,
+    scheduled: point.counts.SCHEDULED + point.counts.UNKNOWN,
+  }));
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Dashboard"
-        description={`${organization.name} — indicadores por período, clínica e médico. Fuso de negócio: ${organization.timezone}.`}
+        description={`${organization.name} — indicadores de agenda. Período em ${organization.timezone}.`}
       />
 
       <section aria-labelledby="filtros" className="space-y-3">
         <h2 id="filtros" className="text-sm font-medium text-slate-700 dark:text-slate-300">
           Filtros
         </h2>
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          <Badge tone="pending">Por implementar</Badge>
-          <span>
-            Período, clínica e médico entram na Fase 3, quando houver KPIs calculáveis para filtrar.
-          </span>
-        </div>
-      </section>
-
-      <section aria-labelledby="indicadores" className="space-y-3">
-        <h2 id="indicadores" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-          Indicadores
-        </h2>
-        {summary.hasImportedData ? (
-          <EmptyState
-            title="Há dados importados, mas ainda nenhum KPI calculável"
-            description={`Estão gravadas ${summary.appointmentFacts} consultas em ${summary.committedBatches} ${summary.committedBatches === 1 ? "lote confirmado" : "lotes confirmados"}. Nenhum dos ${summary.catalogueSize} KPIs do catálogo tem ainda a definição aprovada, por isso não é apresentado nenhum valor: o cálculo entra na Fase 3. Nada é simulado neste ecrã.`}
-          />
-        ) : (
-          <EmptyState
-            title="Ainda não existem dados importados"
-            description={`Nenhum lote foi confirmado nesta organização, por isso não há nada para calcular. Os ${summary.catalogueSize} KPIs do catálogo continuam com a definição por confirmar e não devem produzir números até essa validação. Nada é simulado neste ecrã.`}
-          />
-        )}
-      </section>
-
-      <section aria-labelledby="estado" className="space-y-3">
-        <h2 id="estado" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-          Estado da instalação
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card title="Lotes confirmados">
-            <p className="text-2xl font-semibold tabular-nums">{summary.committedBatches}</p>
-          </Card>
-          <Card title="Factos de agenda">
-            <p className="text-2xl font-semibold tabular-nums">{summary.appointmentFacts}</p>
-          </Card>
-          <Card title="Clínicas">
-            <p className="text-2xl font-semibold tabular-nums">{summary.clinics}</p>
-          </Card>
-          <Card title="Médicos">
-            <p className="text-2xl font-semibold tabular-nums">{summary.practitioners}</p>
-          </Card>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Estas contagens descrevem o estado da base de dados, não são KPIs de negócio.
+        <DashboardFilters
+          fromDate={filters.fromDate}
+          toDate={filters.toDate}
+          clinicId={filters.clinicId}
+          practitionerId={filters.practitionerId}
+          clinics={dashboard.clinics}
+          practitioners={dashboard.practitioners}
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="period-summary">
+          A mostrar <strong>{periodLabel}</strong>, comparado com <strong>{previousLabel}</strong>{" "}
+          (período anterior de igual duração).
         </p>
       </section>
+
+      {dashboard.isEmpty ? (
+        <EmptyState
+          title="Sem consultas no período selecionado"
+          description="Não há factos de agenda para estes filtros, por isso não é apresentado nenhum indicador. Alargue o período, limpe os filtros ou importe uma exportação de agenda."
+          action={
+            <Link href="/imports/new" className="text-sm underline underline-offset-4">
+              Importar ficheiro
+            </Link>
+          }
+        />
+      ) : (
+        <>
+          <section aria-labelledby="indicadores" className="space-y-3">
+            <h2 id="indicadores" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Indicadores
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {APPOINTMENT_KPI_KEYS.map((key) => {
+                const definition = findKpiDefinition(key);
+                if (!definition) return null;
+                return (
+                  <KpiCard
+                    key={key}
+                    comparison={dashboard.kpis[key]}
+                    definition={definition}
+                    periodLabel={periodLabel}
+                    previousPeriodLabel={previousLabel}
+                  />
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              As definições são provisórias: as fórmulas estão fixadas e testadas, mas ainda não
+              foram validadas com o responsável de negócio. Abra &quot;Como é calculado?&quot; em
+              cada cartão.
+            </p>
+          </section>
+
+          {chartPoints.length > 0 ? (
+            <section aria-labelledby="evolucao" className="space-y-3">
+              <h2 id="evolucao" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Evolução mensal
+              </h2>
+              <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+                <MonthlyAppointmentsChart points={chartPoints} />
+              </div>
+            </section>
+          ) : null}
+
+          <section aria-labelledby="resumo" className="space-y-3">
+            <h2 id="resumo" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Resumo por mês
+            </h2>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <table className="w-full text-left text-sm" data-testid="monthly-table">
+                <caption className="sr-only">
+                  Consultas por mês e desfecho, com os valores exatos do gráfico
+                </caption>
+                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-medium">Mês</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Realizadas</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Faltas</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Canceladas</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Por realizar</th>
+                    <th scope="col" className="px-4 py-3 font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {chartPoints.map((point) => (
+                    <tr key={point.month}>
+                      <th scope="row" className="px-4 py-3 font-normal">{point.month}</th>
+                      <td className="px-4 py-3 tabular-nums">{point.completed}</td>
+                      <td className="px-4 py-3 tabular-nums">{point.noShow}</td>
+                      <td className="px-4 py-3 tabular-nums">{point.cancelled}</td>
+                      <td className="px-4 py-3 tabular-nums">{point.scheduled}</td>
+                      <td className="px-4 py-3 font-medium tabular-nums">
+                        {point.completed + point.noShow + point.cancelled + point.scheduled}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Dados de {dashboard.sourceBatchIds.length}{" "}
+              {dashboard.sourceBatchIds.length === 1 ? "lote importado" : "lotes importados"}. As
+              consultas remarcadas não entram em nenhum total: contam na data para onde foram
+              movidas.
+            </p>
+          </section>
+        </>
+      )}
     </div>
   );
 }

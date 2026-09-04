@@ -5,10 +5,14 @@
  * da definição seja persistida com cada resultado. É essa a opção do MVP: as
  * definições são revistas em code review e viajam com o histórico do repositório.
  *
- * Nenhum KPI está `ACTIVE` nesta fase. Todas as definições em
- * `docs/KPI_CATALOG.md` continuam por confirmar com uma exportação real do
- * Newsoft e com o responsável de negócio — e um KPI com fórmula por confirmar
- * não deve produzir um número no ecrã.
+ Estão ativos apenas os KPIs de agenda: são os únicos calculáveis a partir dos
+ * factos que a importação já produz. Os financeiros e os de pacientes continuam
+ * bloqueados por falta de definição de negócio e de amostras validadas — e um
+ * KPI sem fórmula acordada não deve produzir um número no ecrã.
+ *
+ * Nenhum destes KPIs tem ainda `definitionApproved: true`: as fórmulas são
+ * defensáveis e testadas, mas foram decididas por nós e falta a validação do
+ * responsável de negócio contra uma exportação real.
  */
 
 export type KpiKey =
@@ -39,7 +43,7 @@ export type KpiSource =
 export type KpiFilter = "period" | "clinic" | "practitioner";
 
 export type KpiStatus =
-  /** Fórmula aprovada, dados disponíveis, resultado apresentável. */
+  /** Fórmula definida e calculável a partir dos dados importados. */
   | "ACTIVE"
   /** Fórmula proposta mas ainda por confirmar com amostra real ou com o negócio. */
   | "PENDING_DEFINITION";
@@ -54,9 +58,27 @@ export interface KpiDefinition {
   readonly supportedFilters: readonly KpiFilter[];
   readonly definitionVersion: number;
   readonly status: KpiStatus;
-  /** O que falta decidir antes de o KPI poder ficar ativo. */
+  /**
+   * Falso enquanto a definição não for validada com uma exportação real e com o
+   * responsável de negócio. Um KPI ativo mas não aprovado produz números, e o
+   * ecrã tem de dizer que a definição ainda é provisória.
+   */
+  readonly definitionApproved: boolean;
+  /** O que falta decidir. Vazio quando não há nada pendente. */
   readonly openQuestion: string;
 }
+
+/**
+ * Denominador partilhado pelas taxas de agenda (v1).
+ *
+ * Decisão de negócio D-019: contam as consultas cujo desfecho já é conhecido —
+ * realizadas, faltas e canceladas. As que ainda estão por acontecer ficam de
+ * fora, para que um período em curso não mostre uma taxa de realização
+ * artificialmente baixa. As remarcadas não contam em lado nenhum: a consulta
+ * conta na data para onde foi movida.
+ */
+export const RATE_DENOMINATOR_DESCRIPTION =
+  "consultas com desfecho conhecido (realizadas + faltas + canceladas)";
 
 const DEFAULT_FILTERS: readonly KpiFilter[] = ["period", "clinic", "practitioner"];
 
@@ -64,14 +86,17 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
   {
     key: "appointments_scheduled",
     name: "Consultas agendadas",
-    description: "Consultas com marcação no período, segundo os estados considerados elegíveis.",
-    formula: "contagem(AppointmentFact onde occurredAt ∈ período e status ∈ estados elegíveis)",
+    description: "Total de consultas marcadas no período, seja qual for o desfecho.",
+    formula:
+      "contagem(AppointmentFact onde occurredAt ∈ período e status ≠ RESCHEDULED)",
     unit: "COUNT",
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "Que estados da origem contam como agendamento elegível?",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion:
+      "As remarcadas ficam de fora porque contam na data para onde foram movidas. Confirmar com o negócio.",
   },
   {
     key: "appointments_completed",
@@ -82,20 +107,25 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "Confirmar que estados da origem mapeiam para COMPLETED.",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion:
+      "Confirmar que estados da origem mapeiam para COMPLETED quando houver exportação real.",
   },
   {
     key: "completion_rate",
     name: "Taxa de realização",
-    description: "Proporção de consultas realizadas face às agendadas elegíveis.",
-    formula: "appointments_completed / appointments_scheduled",
+    description:
+      "Proporção de consultas realizadas face às consultas com desfecho conhecido.",
+    formula: "realizadas / (realizadas + faltas + canceladas)",
     unit: "PERCENTAGE",
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "O denominador inclui consultas canceladas com antecedência?",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion:
+      "Denominador escolhido em D-019: exclui as consultas por realizar, para um período em curso não parecer mau. Por validar com o negócio.",
   },
   {
     key: "no_show_count",
@@ -106,32 +136,37 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "Confirmar que estados da origem mapeiam para NO_SHOW.",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion:
+      "Confirmar que estados da origem mapeiam para NO_SHOW quando houver exportação real.",
   },
   {
     key: "no_show_rate",
     name: "Taxa de faltas",
-    description: "Proporção de faltas face às consultas agendadas elegíveis.",
-    formula: "no_show_count / appointments_scheduled",
+    description: "Proporção de faltas face às consultas com desfecho conhecido.",
+    formula: "faltas / (realizadas + faltas + canceladas)",
     unit: "PERCENTAGE",
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "Mesmo denominador da taxa de realização?",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion: "Mesmo denominador da taxa de realização (D-019). Por validar com o negócio.",
   },
   {
     key: "cancellation_rate",
     name: "Taxa de cancelamento",
-    description: "Proporção de consultas canceladas face às agendadas elegíveis.",
-    formula: "contagem(status = CANCELLED) / appointments_scheduled",
+    description: "Proporção de cancelamentos face às consultas com desfecho conhecido.",
+    formula: "canceladas / (realizadas + faltas + canceladas)",
     unit: "PERCENTAGE",
     sources: ["AppointmentFact"],
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
-    status: "PENDING_DEFINITION",
-    openQuestion: "Cancelamento pela clínica e pelo paciente contam da mesma forma?",
+    status: "ACTIVE",
+    definitionApproved: false,
+    openQuestion:
+      "Cancelamento pela clínica e pelo paciente contam da mesma forma. Por validar com o negócio.",
   },
   {
     key: "new_patients",
@@ -143,6 +178,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Primeira consulta no histórico importado ou primeira no Newsoft?",
   },
   {
@@ -155,6 +191,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: ["period", "clinic"],
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Bloqueado: falta a definição de negócio de 'ativo'.",
   },
   {
@@ -167,6 +204,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: ["period", "clinic"],
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Bloqueado: depende da definição de 'ativo'.",
   },
   {
@@ -179,6 +217,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Bloqueado: qual o intervalo de inatividade que define reativação?",
   },
   {
@@ -191,6 +230,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: ["period", "clinic"],
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Bloqueado: regra temporal por aprovar.",
   },
   {
@@ -203,6 +243,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Que data usar (execução ou registo) e como tratar reversões?",
   },
   {
@@ -215,6 +256,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Com ou sem IVA? Como entram as notas de crédito?",
   },
   {
@@ -227,6 +269,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: DEFAULT_FILTERS,
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Como tratar versões sucessivas do mesmo orçamento?",
   },
   {
@@ -239,6 +282,7 @@ export const KPI_CATALOG: readonly KpiDefinition[] = [
     supportedFilters: ["period", "clinic"],
     definitionVersion: 1,
     status: "PENDING_DEFINITION",
+    definitionApproved: false,
     openQuestion: "Snapshot da origem ou saldo derivado de movimentos?",
   },
 ];
@@ -250,3 +294,15 @@ export function findKpiDefinition(key: KpiKey): KpiDefinition | undefined {
 export function activeKpiDefinitions(): readonly KpiDefinition[] {
   return KPI_CATALOG.filter((definition) => definition.status === "ACTIVE");
 }
+
+/** KPIs de agenda, pela ordem em que são apresentados no dashboard. */
+export const APPOINTMENT_KPI_KEYS = [
+  "appointments_scheduled",
+  "appointments_completed",
+  "completion_rate",
+  "no_show_count",
+  "no_show_rate",
+  "cancellation_rate",
+] as const satisfies readonly KpiKey[];
+
+export type AppointmentKpiKey = (typeof APPOINTMENT_KPI_KEYS)[number];

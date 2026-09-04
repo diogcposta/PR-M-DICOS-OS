@@ -4,9 +4,18 @@ Gestão analítica para clínicas. Recebe exportações manuais em Excel/CSV, pr
 
 Antes de mexer no código, ler `CLAUDE.md`, `docs/MVP.md` e `docs/ARCHITECTURE.md`.
 
-## Estado atual — Fase 2 concluída
+## Estado atual — Fase 3 concluída
 
-O pipeline de importação de agenda está funcional de ponta a ponta:
+O dashboard calcula KPIs de agenda a partir dos dados importados:
+
+- seis indicadores: consultas agendadas, realizadas, faltas e as três taxas;
+- filtros por período, clínica e médico, guardados no URL;
+- comparação com o período anterior de igual duração;
+- evolução mensal por mês civil de `Europe/Lisbon`, com tabela dos valores exatos;
+- "Como é calculado?" em cada cartão, com fórmula, numerador, denominador, fontes e versão;
+- divisão por zero mostra "sem dados", nunca 0%.
+
+O pipeline de importação da Fase 2 continua funcional:
 
 - upload de `.csv` e `.xlsx` no servidor, com limites de tipo (20 MB) e rejeição antes do parsing;
 - SHA-256 por ficheiro, com aviso na pré-visualização e bloqueio de reimportação;
@@ -25,7 +34,9 @@ A base técnica da Fase 1 continua de pé:
 - validação tipada de variáveis de ambiente;
 - testes unitários de domínio e teste de saúde da aplicação.
 
-**Ainda não existe** cálculo de KPIs — é a Fase 3. Nenhum número apresentado no dashboard é simulado: onde não há dados, o ecrã diz que não há.
+**Os KPIs financeiros e de pacientes continuam bloqueados**: não há definição de negócio aprovada para "ativo", "perdido" ou "reativado", nem amostras validadas de produção e faturação. Calculá-los seria inventar a definição.
+
+As fórmulas de agenda estão fixadas e testadas, mas **ainda não foram validadas com o responsável de negócio** — o ecrã marca cada uma como "definição provisória" e diz o que falta decidir. O denominador das taxas está registado em D-019.
 
 O perfil de mapeamento é **sintético**. Os cabeçalhos (`id_consulta`, `data_hora`, …) foram inventados para as fixtures deste repositório e não representam nenhuma exportação real do Newsoft.
 
@@ -102,6 +113,18 @@ npm run dev
 7. repetir com `tests/fixtures/agenda-com-erros.csv` → 7 linhas inválidas com erro por linha e coluna; confirmar fica bloqueado até assinalar explicitamente "gravar apenas as linhas válidas";
 8. `tests/fixtures/agenda-valida.xlsx` demonstra o mesmo com Excel e duas folhas.
 
+## Demonstrar o dashboard
+
+Depois de importar `tests/fixtures/agenda-dashboard.csv`:
+
+1. abrir <http://localhost:3000/?de=2025-01-01&ate=2025-01-31>;
+2. 5 consultas — 2 realizadas, 1 falta, 1 cancelada, 1 por realizar;
+3. taxa de realização 50,0 % (denominador 4, não 5: a consulta por realizar não conta);
+4. abrir "Como é calculado?" num cartão para ver fórmula, numerador, denominador e versão;
+5. filtrar por clínica e ver o denominador acompanhar o filtro;
+6. `?de=2025-01-10&ate=2025-01-10` — só uma consulta por realizar: as taxas mostram "sem dados", não 0 %;
+7. `?de=2024-01-01&ate=2024-01-31` — período vazio, sem indicadores inventados.
+
 ## Qualidade
 
 ```bash
@@ -141,7 +164,7 @@ src/app/           páginas, layout e route handlers (sem regras de negócio)
 src/components/    UI acessível e reutilizável
 src/modules/
   imports/         parsing, normalização, validação e commit transacional
-  kpis/            dinheiro, períodos, rácios e catálogo de KPIs
+  kpis/            dinheiro, períodos, rácios, catálogo e cálculo dos KPIs
   ai/              contrato neutro de fornecedor + implementação desativada
   organizations/   contexto de organização
 src/lib/
@@ -169,4 +192,4 @@ prompts/           os pedidos de cada fase
 
 ## Fase seguinte
 
-`prompts/03-kpis-dashboard.md` — cálculo determinístico de KPIs, filtros por período/clínica/médico e comparação com o período anterior.
+`prompts/04-real-newsoft-samples.md` — mapear as exportações reais do Newsoft a partir de amostras anonimizadas, substituindo o perfil sintético.
