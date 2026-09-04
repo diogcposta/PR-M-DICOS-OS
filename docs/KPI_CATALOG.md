@@ -6,6 +6,8 @@ A implementação viva está em `src/modules/kpis/domain/catalog.ts`, com a vers
 
 **Estado a partir da Fase 3**: os KPIs de agenda estão ativos e calculados. Nenhum tem ainda `definitionApproved: true` — o ecrã marca-os como "definição provisória". Os financeiros e os de pacientes continuam bloqueados, por falta de definição de negócio e de amostras validadas.
 
+**Fase 4A**: os dados por trás destes KPIs são exclusivamente sintéticos (perfil `SYNTHETIC_AGENDA_V1`, gerador determinístico em `src/modules/imports/domain/synthetic-dataset.ts`). Cada resultado de KPI transporta agora a sua proveniência completa — período, filtros, numerador/denominador, lotes de origem e data da última atualização — para que um número no dashboard possa sempre ser reconstruído. A adaptação a exportações reais do Newsoft (Fase 4) continua pendente de amostras anonimizadas.
+
 ## Denominador das taxas de agenda (v1, D-019)
 
 As três taxas partilham o mesmo denominador: **consultas com desfecho conhecido**, ou seja realizadas + faltas + canceladas. As consultas ainda por realizar ficam de fora, para que olhar para o mês corrente a meio do mês não mostre uma taxa de realização artificialmente baixa. As remarcadas não entram em nenhum total: contam na data para onde foram movidas.

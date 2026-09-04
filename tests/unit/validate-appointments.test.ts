@@ -17,9 +17,9 @@ function row(overrides: Partial<Record<string, unknown>> = {}): RawRow {
   return {
     id_consulta: "SYN-0001",
     data_hora: "06/01/2025 09:00",
-    id_clinica: "DEMO-CL-001",
-    id_medico: "DEMO-DR-001",
-    ref_paciente: "PAC-A1",
+    id_clinica: "CLINIC-001",
+    id_medico: "DOCTOR-001",
+    ref_paciente: "PATIENT-001",
     estado: "Realizada",
     duracao_min: "30",
     ...overrides,
@@ -121,10 +121,10 @@ describe("chave estável", () => {
   it("usa o identificador da origem quando existe", () => {
     const key = buildStableRowKey({
       sourceRecordId: "SYN-0001",
-      clinicExternalId: "DEMO-CL-001",
+      clinicExternalId: "CLINIC-001",
       occurredAt: new Date("2025-01-06T09:00:00.000Z"),
-      patientExternalRef: "PAC-A1",
-      practitionerExternalId: "DEMO-DR-001",
+      patientExternalRef: "PATIENT-001",
+      practitionerExternalId: "DOCTOR-001",
     });
     expect(key).toBe("APPOINTMENTS:id:SYN-0001");
   });
@@ -132,10 +132,10 @@ describe("chave estável", () => {
   it("deriva uma chave estável e determinística quando não há identificador", () => {
     const input = {
       sourceRecordId: null,
-      clinicExternalId: "DEMO-CL-001",
+      clinicExternalId: "CLINIC-001",
       occurredAt: new Date("2025-01-06T09:00:00.000Z"),
-      patientExternalRef: "PAC-A1",
-      practitionerExternalId: "DEMO-DR-001",
+      patientExternalRef: "PATIENT-001",
+      practitionerExternalId: "DOCTOR-001",
     };
     const first = buildStableRowKey(input);
     expect(buildStableRowKey(input)).toBe(first);
@@ -145,16 +145,16 @@ describe("chave estável", () => {
   it("distingue consultas diferentes", () => {
     const base = {
       sourceRecordId: null,
-      clinicExternalId: "DEMO-CL-001",
+      clinicExternalId: "CLINIC-001",
       occurredAt: new Date("2025-01-06T09:00:00.000Z"),
-      patientExternalRef: "PAC-A1",
+      patientExternalRef: "PATIENT-001",
       practitionerExternalId: null,
     };
     expect(buildStableRowKey(base)).not.toBe(
       buildStableRowKey({ ...base, occurredAt: new Date("2025-01-06T10:00:00.000Z") }),
     );
     expect(buildStableRowKey(base)).not.toBe(
-      buildStableRowKey({ ...base, patientExternalRef: "PAC-B2" }),
+      buildStableRowKey({ ...base, patientExternalRef: "PATIENT-002" }),
     );
   });
 });

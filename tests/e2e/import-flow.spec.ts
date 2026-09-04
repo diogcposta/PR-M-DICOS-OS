@@ -37,14 +37,17 @@ test("importa um ficheiro válido do início ao fim", async ({ page }) => {
 
   const result = page.getByTestId("commit-result");
   await expect(result).toHaveAttribute("data-kind", "COMMITTED");
-  await expect(result).toContainText("6 consultas gravadas");
+  await expect(page.getByTestId("summary-accepted")).toContainText("6");
+  await expect(page.getByTestId("summary-rejected")).toContainText("0");
+  await expect(page.getByTestId("summary-ignored")).toContainText("0");
+  await expect(page.getByTestId("download-errors")).toBeVisible();
 
   // O lote aparece no histórico.
   await page.goto("/imports");
   await expect(page.getByRole("link", { name: "agenda-valida.csv" })).toBeVisible();
   await page.getByRole("link", { name: "agenda-valida.csv" }).click();
   await expect(page.getByTestId("rows-committed")).toContainText("6");
-  await expect(page.getByText("agenda-sintetica v1")).toBeVisible();
+  await expect(page.getByText("SYNTHETIC_AGENDA_V1 v1")).toBeVisible();
 });
 
 test("avisa e não duplica quando o mesmo ficheiro é reimportado", async ({ page }) => {
@@ -82,7 +85,47 @@ test("mostra os erros por linha e exige escolha explícita para gravar parcialme
 
   await page.getByTestId("commit-button").click();
   await expect(page.getByTestId("commit-result")).toHaveAttribute("data-kind", "COMMITTED");
-  await expect(page.getByTestId("commit-result")).toContainText("1 consultas gravadas");
+  await expect(page.getByTestId("summary-accepted")).toContainText("1");
+  await expect(page.getByTestId("summary-rejected")).toContainText("7");
+});
+
+test("descarrega o relatório de erros em CSV", async ({ page }) => {
+  await page.goto("/imports/new");
+
+  // Conteúdo próprio, com uma linha válida e uma inválida: a fixture partilhada
+  // "agenda-com-erros.csv" já foi importada pelo teste anterior nesta mesma
+  // suíte serial, e reenviá-la aqui seria visto como duplicado — o link de
+  // download nem chegaria a aparecer. Precisa de pelo menos uma linha válida,
+  // senão o botão de confirmar fica desativado independentemente do checkbox.
+  const csvComUmErro = Buffer.from(
+    "id_consulta;data_hora;id_clinica;id_medico;ref_paciente;estado;duracao_min\n" +
+      "SYN-DL-01;20/06/2025 09:00;CLINIC-001;DOCTOR-001;PATIENT-901;Realizada;30\n" +
+      "SYN-DL-02;31/02/2025 09:00;CLINIC-001;DOCTOR-001;PATIENT-902;Realizada;30\n",
+    "utf8",
+  );
+  await page.getByTestId("file-input").setInputFiles({
+    name: "agenda-para-descarregar-erros.csv",
+    mimeType: "text/csv",
+    buffer: csvComUmErro,
+  });
+
+  await page.getByTestId("validate-button").click();
+  await expect(page.getByTestId("rows-valid")).toContainText("1");
+  await expect(page.getByTestId("rows-invalid")).toContainText("1");
+  await page.getByTestId("allow-partial").check();
+  await page.getByTestId("commit-button").click();
+  await expect(page.getByTestId("commit-result")).toHaveAttribute("data-kind", "COMMITTED");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("download-errors").click(),
+  ]);
+
+  expect(download.suggestedFilename()).toMatch(/^erros-.*\.csv$/);
+  const content = await (await download.createReadStream())?.toArray();
+  const csv = Buffer.concat(content ?? []).toString("utf8");
+  expect(csv).toContain("linha;coluna;gravidade;codigo;mensagem");
+  expect(csv).toContain("DATE_OUT_OF_RANGE");
 });
 
 test("recusa um tipo de ficheiro não suportado", async ({ page }) => {

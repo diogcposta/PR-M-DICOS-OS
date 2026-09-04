@@ -10,7 +10,7 @@ import {
   type KpiComparison,
   compareAllAppointmentKpis,
 } from "@/modules/kpis/domain/appointment-kpis";
-import type { AppointmentKpiKey } from "@/modules/kpis/domain/catalog";
+import { type AppointmentKpiKey, findKpiDefinition } from "@/modules/kpis/domain/catalog";
 import {
   type CivilDate,
   type Period,
@@ -18,11 +18,19 @@ import {
   previousPeriod,
 } from "@/modules/kpis/domain/period";
 import {
+  type KpiProvenance,
+  type SourceBatch,
+  hasSyntheticSource,
+  lastCommittedAt,
+} from "@/modules/kpis/domain/provenance";
+import {
   type AppointmentFilters,
   type FilterOption,
   type MonthlyPoint,
   countByStatus,
+  describeFilterTargets,
   listFilterOptions,
+  loadSourceBatches,
   monthlyCountsByStatus,
   sourceBatchIds,
 } from "@/modules/kpis/infrastructure/appointment-queries";
@@ -48,7 +56,12 @@ export interface AppointmentDashboard {
   /** Verdadeiro quando não há uma única consulta no período filtrado. */
   readonly isEmpty: boolean;
   /** Lotes de importação que originaram os factos do período. */
-  readonly sourceBatchIds: readonly string[];
+  readonly batches: readonly SourceBatch[];
+  /** Proveniência por KPI: de onde veio cada número. */
+  readonly provenance: Record<AppointmentKpiKey, KpiProvenance>;
+  /** Verdadeiro enquanto algum lote vier de um perfil sintético. */
+  readonly isSynthetic: boolean;
+  readonly lastUpdatedAt: Date | null;
 }
 
 export async function getAppointmentDashboard(
@@ -63,26 +76,59 @@ export async function getAppointmentDashboard(
     practitionerId: query.practitionerId,
   };
 
-  const [counts, previousCounts, monthly, options, batchIds] = await Promise.all([
+  const [counts, previousCounts, monthly, options, batchIds, filterTargets] = await Promise.all([
     countByStatus(filters, period),
     countByStatus(filters, comparisonPeriod),
     monthlyCountsByStatus(filters, period),
     listFilterOptions(query.organizationId),
     sourceBatchIds(filters, period),
+    describeFilterTargets(query.organizationId, filters),
   ]);
 
+  const batches = await loadSourceBatches(query.organizationId, batchIds);
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const kpis = compareAllAppointmentKpis(counts, previousCounts);
+  const updatedAt = lastCommittedAt(batches);
+
+  // Cada KPI leva consigo a prova do seu próprio número.
+  const provenance = {} as Record<AppointmentKpiKey, KpiProvenance>;
+  for (const [key, comparison] of Object.entries(kpis) as [
+    AppointmentKpiKey,
+    (typeof kpis)[AppointmentKpiKey],
+  ][]) {
+    const definition = findKpiDefinition(key);
+    provenance[key] = {
+      definitionVersion: comparison.current.definitionVersion,
+      definitionApproved: definition?.definitionApproved ?? false,
+      formula: definition?.formula ?? "",
+      sources: definition?.sources ?? [],
+      period: { fromDate: period.fromDate, toDate: period.toDate },
+      comparisonPeriod: {
+        fromDate: comparisonPeriod.fromDate,
+        toDate: comparisonPeriod.toDate,
+      },
+      timeZone: period.timeZone,
+      filters: filterTargets,
+      numerator: comparison.current.numerator,
+      denominator: comparison.current.denominator,
+      batches,
+      lastUpdatedAt: updatedAt,
+    };
+  }
 
   return {
     period,
     comparisonPeriod,
     counts,
     previousCounts,
-    kpis: compareAllAppointmentKpis(counts, previousCounts),
+    kpis,
     monthly,
     clinics: options.clinics,
     practitioners: options.practitioners,
     isEmpty: total === 0,
-    sourceBatchIds: batchIds,
+    batches,
+    provenance,
+    isSynthetic: hasSyntheticSource(batches),
+    lastUpdatedAt: updatedAt,
   };
 }

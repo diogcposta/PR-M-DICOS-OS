@@ -39,7 +39,7 @@ describe("confirmação de um ficheiro válido", () => {
     const outcome = await commit("agenda-valida.csv");
 
     expect(outcome.kind).toBe("COMMITTED");
-    expect(outcome.kind === "COMMITTED" && outcome.rowsCommitted).toBe(6);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsAccepted).toBe(6);
 
     const facts = await prisma.appointmentFact.findMany({ orderBy: { occurredAt: "asc" } });
     expect(facts).toHaveLength(6);
@@ -80,7 +80,7 @@ describe("confirmação de um ficheiro válido", () => {
   it("grava o perfil de mapeamento versionado", async () => {
     await commit("agenda-valida.csv");
     const profile = await prisma.importProfile.findFirstOrThrow();
-    expect(profile.key).toBe("agenda-sintetica");
+    expect(profile.key).toBe("SYNTHETIC_AGENDA_V1");
     expect(profile.version).toBe(1);
     // O perfil continua marcado como sintético: não vem de uma amostra real.
     expect(profile.isSynthetic).toBe(true);
@@ -88,7 +88,7 @@ describe("confirmação de um ficheiro válido", () => {
 
   it("lê o .xlsx com o mesmo resultado do .csv equivalente", async () => {
     const outcome = await commit("agenda-valida.xlsx");
-    expect(outcome.kind === "COMMITTED" && outcome.rowsCommitted).toBe(6);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsAccepted).toBe(6);
     expect(await prisma.appointmentFact.count()).toBe(6);
   });
 });
@@ -126,7 +126,7 @@ describe("deduplicação", () => {
     // de ficheiro — mas as consultas repetidas não podem entrar duas vezes.
     const original = (await fixture("agenda-valida.csv")).toString("utf8");
     const extended = Buffer.from(
-      `${original.trimEnd()}\nSYN-0007;10/01/2025 09:00;DEMO-CL-001;DEMO-DR-001;PAC-G7;Agendada;30\n`,
+      `${original.trimEnd()}\nSYN-0007;10/01/2025 09:00;CLINIC-001;DOCTOR-001;PATIENT-007;Agendada;30\n`,
     );
 
     const outcome = await commitAppointmentFile({
@@ -139,14 +139,27 @@ describe("deduplicação", () => {
 
     expect(outcome.kind).toBe("COMMITTED");
     // Só a linha nova entrou: as 6 anteriores foram ignoradas pela chave estável.
-    expect(outcome.kind === "COMMITTED" && outcome.rowsCommitted).toBe(1);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsAccepted).toBe(1);
+    // As 6 anteriores já existiam: ignoradas, não rejeitadas.
+    expect(outcome.kind === "COMMITTED" && outcome.rowsIgnored).toBe(6);
     expect(await prisma.appointmentFact.count()).toBe(7);
   });
 
   it("grava uma só vez linhas repetidas dentro do mesmo ficheiro", async () => {
     const outcome = await commit("agenda-com-repetidas.csv");
-    expect(outcome.kind === "COMMITTED" && outcome.rowsCommitted).toBe(2);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsAccepted).toBe(2);
+    // A terceira linha é repetida: ignorada, não rejeitada.
+    expect(outcome.kind === "COMMITTED" && outcome.rowsIgnored).toBe(1);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsRejected).toBe(0);
     expect(await prisma.appointmentFact.count()).toBe(2);
+  });
+
+  it("as três contagens do resumo somam sempre o total de linhas", async () => {
+    const outcome = await commit("agenda-com-erros.csv", { rowPolicy: "VALID_ROWS_ONLY" });
+    if (outcome.kind !== "COMMITTED") throw new Error("esperava COMMITTED");
+    expect(outcome.rowsAccepted + outcome.rowsRejected + outcome.rowsIgnored).toBe(
+      outcome.rowsTotal,
+    );
   });
 });
 
@@ -167,8 +180,10 @@ describe("política de linhas inválidas (D-008)", () => {
     const outcome = await commit("agenda-com-erros.csv", { rowPolicy: "VALID_ROWS_ONLY" });
 
     expect(outcome.kind).toBe("COMMITTED");
-    expect(outcome.kind === "COMMITTED" && outcome.rowsCommitted).toBe(1);
-    expect(outcome.kind === "COMMITTED" && outcome.rowsSkipped).toBe(7);
+    // 8 linhas: 1 aceite, 7 rejeitadas por erro, 0 ignoradas.
+    expect(outcome.kind === "COMMITTED" && outcome.rowsAccepted).toBe(1);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsRejected).toBe(7);
+    expect(outcome.kind === "COMMITTED" && outcome.rowsIgnored).toBe(0);
     expect(await prisma.appointmentFact.count()).toBe(1);
   });
 
@@ -193,7 +208,7 @@ describe("política de linhas inválidas (D-008)", () => {
     await commit("agenda-com-erros.csv", { rowPolicy: "VALID_ROWS_ONLY" });
     const errors = await prisma.importRowError.findMany();
     // As referências de paciente do ficheiro nunca entram nas mensagens.
-    expect(errors.some((error) => error.message.includes("PAC-"))).toBe(false);
+    expect(errors.some((error) => error.message.includes("PATIENT-"))).toBe(false);
   });
 });
 

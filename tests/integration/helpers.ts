@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/db/client";
 
-export const CLINIC_A = "DEMO-CL-001";
-export const CLINIC_B = "DEMO-CL-002";
-export const DOCTOR_A = "DEMO-DR-001";
-export const DOCTOR_B = "DEMO-DR-002";
+export const CLINIC_A = "CLINIC-001";
+export const CLINIC_B = "CLINIC-002";
+export const DOCTOR_A = "DOCTOR-001";
+export const DOCTOR_B = "DOCTOR-002";
 
 /** Base limpa com a organização sintética mínima. Devolve o organizationId. */
 export async function resetDatabase(): Promise<string> {
@@ -25,15 +25,45 @@ export async function resetDatabase(): Promise<string> {
 
   await prisma.clinic.createMany({
     data: [
-      { organizationId: organization.id, externalId: CLINIC_A, name: "Unidade A (teste)" },
-      { organizationId: organization.id, externalId: CLINIC_B, name: "Unidade B (teste)" },
+      { organizationId: organization.id, externalId: CLINIC_A, name: "CLINIC-001 (teste)" },
+      { organizationId: organization.id, externalId: CLINIC_B, name: "CLINIC-002 (teste)" },
     ],
   });
 
   await prisma.practitioner.createMany({
     data: [
-      { organizationId: organization.id, externalId: DOCTOR_A, displayName: "Dr. Teste Um" },
-      { organizationId: organization.id, externalId: DOCTOR_B, displayName: "Dra. Teste Dois" },
+      { organizationId: organization.id, externalId: DOCTOR_A, displayName: "DOCTOR-001 (teste)" },
+      { organizationId: organization.id, externalId: DOCTOR_B, displayName: "DOCTOR-002 (teste)" },
+    ],
+  });
+
+  return organization.id;
+}
+
+/**
+ * Cria uma segunda organização, com os mesmos identificadores externos de
+ * clínica e médico da primeira.
+ *
+ * Usar os mesmos `externalId` é deliberado: prova que o isolamento vem da
+ * chave composta `(organizationId, externalId)`, e não de identificadores por
+ * acaso distintos entre as duas organizações.
+ */
+export async function createSecondOrganization(): Promise<string> {
+  const organization = await prisma.organization.create({
+    data: { name: "Outra organização de teste", slug: "outra-teste", timezone: "Europe/Lisbon" },
+  });
+
+  await prisma.clinic.createMany({
+    data: [
+      { organizationId: organization.id, externalId: CLINIC_A, name: "CLINIC-001 (outra org)" },
+      { organizationId: organization.id, externalId: CLINIC_B, name: "CLINIC-002 (outra org)" },
+    ],
+  });
+
+  await prisma.practitioner.createMany({
+    data: [
+      { organizationId: organization.id, externalId: DOCTOR_A, displayName: "DOCTOR-001 (outra org)" },
+      { organizationId: organization.id, externalId: DOCTOR_B, displayName: "DOCTOR-002 (outra org)" },
     ],
   });
 

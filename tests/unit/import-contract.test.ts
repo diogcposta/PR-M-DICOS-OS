@@ -31,20 +31,20 @@ describe("contrato de importação", () => {
     const valid = canonicalRowSchema.safeParse({
       sourceType: "APPOINTMENTS",
       stableRowKey: "chave-estavel-1",
-      clinicExternalId: "DEMO-CL-001",
+      clinicExternalId: "CLINIC-001",
       occurredAt: new Date("2025-01-15T09:00:00.000Z"),
       sourceRowNumber: 2,
-      importProfileKey: "agenda-sintetica",
+      importProfileKey: "SYNTHETIC_AGENDA_V1",
       importProfileVersion: 1,
     });
     expect(valid.success).toBe(true);
 
     const missingKey = canonicalRowSchema.safeParse({
       sourceType: "APPOINTMENTS",
-      clinicExternalId: "DEMO-CL-001",
+      clinicExternalId: "CLINIC-001",
       occurredAt: new Date(),
       sourceRowNumber: 2,
-      importProfileKey: "agenda-sintetica",
+      importProfileKey: "SYNTHETIC_AGENDA_V1",
       importProfileVersion: 1,
     });
     expect(missingKey.success).toBe(false);

@@ -28,13 +28,22 @@
 | D-023 | Filtros do dashboard vivem no URL (formulário GET), não no estado React: um dashboard filtrado é partilhável e sobrevive ao refresh | aceite |
 | D-024 | Gráfico em SVG próprio, sem biblioteca de charts: uma série empilhada e um eixo não justificam a dependência | aceite |
 
+| D-025 | Perfil renomeado de `agenda-sintetica` para `SYNTHETIC_AGENDA_V1`, explicitamente sem a palavra "Newsoft" em lado nenhum do código, para não sugerir uma correspondência que não existe | aceite (Fase 4A) |
+| D-026 | Gerador de dados sintéticos com PRNG semeado (congruencial linear), não `Math.random()`: a mesma semente tem de produzir sempre o mesmo ficheiro, porque o importador identifica ficheiros por SHA-256 | aceite (Fase 4A) |
+| D-027 | Os carimbos temporais do contentor ZIP do `.xlsx` gerado são normalizados para uma data fixa (1980-01-01, o mínimo do formato DOS): o ExcelJS produz conteúdo determinístico, mas grava a hora de escrita no ZIP, o que mudava o hash a cada geração | aceite (Fase 4A) |
+| D-028 | Resultado da confirmação em três vias — `rowsAccepted`/`rowsRejected`/`rowsIgnored`, que somam sempre `rowsTotal` — em vez de `rowsCommitted`/`rowsSkipped`: "ignorada por já existir" e "rejeitada por erro" são motivos diferentes e o gestor precisa de os distinguir | aceite (Fase 4A) |
+| D-029 | Relatório de erros descarregável em CSV com `;`, CRLF e BOM UTF-8 (para abrir corretamente no Excel português) e neutralização de valores que comecem por `=`, `+`, `-` ou `@` (para o Excel não os executar como fórmula) | aceite (Fase 4A) |
+| D-030 | Cada resultado de KPI carrega proveniência completa: versão da definição, período e período de comparação, filtros aplicados (nomes, não IDs), numerador, denominador, lotes de origem e data da última atualização | aceite (Fase 4A) |
+| D-031 | Página `/qualidade` como fonte única de verdade sobre o estado dos dados: lotes, motivos de rejeição agregados, campos opcionais em falta e meses sem dados dentro do intervalo coberto | aceite (Fase 4A) |
+| D-032 | Testes de isolamento entre organizações usam deliberadamente os mesmos identificadores externos (`CLINIC-001`, `DOCTOR-001`) nas duas organizações de teste, para provar que o isolamento vem da chave composta `(organizationId, externalId)` e não de identificadores que por acaso não colidem | aceite (Fase 4A) |
+
 ## Dúvidas por resolver
 
 - **Validação das fórmulas de agenda**: as definições de D-019 a D-021 estão implementadas e testadas, mas foram decididas por nós. Precisam de confirmação do responsável de negócio antes de `definitionApproved` passar a `true`.
 - **Definições de negócio**: "ativo", "inativo", "perdido" e "reativado" continuam sem definição aprovada. Os KPIs correspondentes estão bloqueados no catálogo.
 - **Cancelamentos**: cancelamento pela clínica e pelo paciente contam da mesma forma na taxa? Hoje sim.
 - **Produção vs. faturação**: que data usar em cada facto e como tratar reversões e notas de crédito.
-- **Amostras reais**: nenhum mapeamento de colunas do Newsoft pode ser fechado antes de recebermos exportações anonimizadas de cada área (10–30 linhas, sem dados pessoais). O perfil `agenda-sintetica` v1 é um andaime, não o mapeamento definitivo.
+- **Amostras reais**: nenhum mapeamento de colunas do Newsoft pode ser fechado antes de recebermos exportações anonimizadas de cada área (10–30 linhas, sem dados pessoais). O perfil `SYNTHETIC_AGENDA_V1` é um andaime, não o mapeamento definitivo — ver "Substituir o perfil sintético por um real" no README.
 - **Correção de um lote confirmado**: hoje um lote `COMMITTED` é terminal e corrige-se importando um novo ficheiro. Falta decidir se é preciso anular um lote e o que fazer aos factos que ele criou.
 
 ## Notas técnicas conhecidas

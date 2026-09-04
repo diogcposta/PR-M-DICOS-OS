@@ -15,12 +15,12 @@ async function main(): Promise<void> {
   const sheet = workbook.addWorksheet("Agenda");
   sheet.addRow(["id_consulta", "data_hora", "id_clinica", "id_medico", "ref_paciente", "estado", "duracao_min"]);
   const rows: (string | number)[][] = [
-    ["SYN-0001", "06/01/2025 09:00", "DEMO-CL-001", "DEMO-DR-001", "PAC-A1", "Realizada", 30],
-    ["SYN-0002", "06/01/2025 09:30", "DEMO-CL-001", "DEMO-DR-001", "PAC-B2", "Faltou", 30],
-    ["SYN-0003", "07/01/2025 14:15", "DEMO-CL-001", "DEMO-DR-002", "PAC-C3", "Agendada", 45],
-    ["SYN-0004", "07/01/2025 15:00", "DEMO-CL-002", "DEMO-DR-002", "PAC-D4", "Cancelada", 30],
-    ["SYN-0005", "08/01/2025 10:00", "DEMO-CL-002", "DEMO-DR-001", "PAC-E5", "Realizada", 60],
-    ["SYN-0006", "30/03/2025 10:30", "DEMO-CL-001", "DEMO-DR-001", "PAC-F6", "Realizada", 30],
+    ["SYN-0001", "06/01/2025 09:00", "CLINIC-001", "DOCTOR-001", "PATIENT-001", "Realizada", 30],
+    ["SYN-0002", "06/01/2025 09:30", "CLINIC-001", "DOCTOR-001", "PATIENT-002", "Faltou", 30],
+    ["SYN-0003", "07/01/2025 14:15", "CLINIC-001", "DOCTOR-002", "PATIENT-003", "Agendada", 45],
+    ["SYN-0004", "07/01/2025 15:00", "CLINIC-002", "DOCTOR-002", "PATIENT-004", "Cancelada", 30],
+    ["SYN-0005", "08/01/2025 10:00", "CLINIC-002", "DOCTOR-001", "PATIENT-005", "Realizada", 60],
+    ["SYN-0006", "30/03/2025 10:30", "CLINIC-001", "DOCTOR-001", "PATIENT-006", "Realizada", 30],
   ];
   for (const row of rows) {
     sheet.addRow(row);

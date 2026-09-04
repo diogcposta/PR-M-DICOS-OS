@@ -78,7 +78,7 @@ describe("normalização de texto e rótulos", () => {
   it("trata células vazias como ausentes", () => {
     expect(normalizeText("  ")).toBeNull();
     expect(normalizeText(null)).toBeNull();
-    expect(normalizeText(" DEMO-CL-001 ")).toBe("DEMO-CL-001");
+    expect(normalizeText(" CLINIC-001 ")).toBe("CLINIC-001");
   });
 
   it("compara rótulos sem acentos nem maiúsculas", () => {

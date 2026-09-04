@@ -56,7 +56,14 @@ interface ValidationReport {
 }
 
 type CommitResult =
-  | { kind: "COMMITTED"; batchId: string; rowsCommitted: number; rowsSkipped: number }
+  | {
+      kind: "COMMITTED";
+      batchId: string;
+      rowsTotal: number;
+      rowsAccepted: number;
+      rowsRejected: number;
+      rowsIgnored: number;
+    }
   | { kind: "DUPLICATE"; batchId: string; previousBatchId: string }
   | { kind: "REJECTED"; batchId: string; reason: string };
 
@@ -447,10 +454,25 @@ export function ImportWizard() {
             className="rounded-lg border border-slate-200 bg-white p-5 text-sm dark:border-slate-800 dark:bg-slate-900"
           >
             {result.kind === "COMMITTED" ? (
-              <p className="text-emerald-700 dark:text-emerald-400">
-                Importação confirmada: {result.rowsCommitted} consultas gravadas
-                {result.rowsSkipped > 0 ? `, ${result.rowsSkipped} linhas não gravadas` : ""}.
-              </p>
+              <div>
+                <p className="text-emerald-700 dark:text-emerald-400">
+                  Importação confirmada. Das {result.rowsTotal} linhas do ficheiro:
+                </p>
+                <ul className="mt-2 space-y-1">
+                  <li data-testid="summary-accepted">
+                    <strong className="tabular-nums">{result.rowsAccepted}</strong> aceites e
+                    gravadas
+                  </li>
+                  <li data-testid="summary-rejected">
+                    <strong className="tabular-nums">{result.rowsRejected}</strong> rejeitadas por
+                    erro de validação
+                  </li>
+                  <li data-testid="summary-ignored">
+                    <strong className="tabular-nums">{result.rowsIgnored}</strong> ignoradas por já
+                    existirem (repetidas no ficheiro ou já importadas antes)
+                  </li>
+                </ul>
+              </div>
             ) : null}
             {result.kind === "DUPLICATE" ? (
               <p className="text-amber-700 dark:text-amber-400">
@@ -461,12 +483,20 @@ export function ImportWizard() {
             {result.kind === "REJECTED" ? (
               <p className="text-red-700 dark:text-red-400">Lote recusado: {result.reason}</p>
             ) : null}
-            <a
-              href={`/imports/${result.batchId}`}
-              className="mt-3 inline-block underline underline-offset-4"
-            >
-              Ver detalhe do lote
-            </a>
+            <div className="mt-3 flex flex-wrap gap-4">
+              <a href={`/imports/${result.batchId}`} className="underline underline-offset-4">
+                Ver detalhe do lote
+              </a>
+              {result.kind !== "DUPLICATE" ? (
+                <a
+                  href={`/api/imports/${result.batchId}/errors`}
+                  data-testid="download-errors"
+                  className="underline underline-offset-4"
+                >
+                  Descarregar relatório de erros (CSV)
+                </a>
+              ) : null}
+            </div>
           </div>
         </section>
       ) : null}

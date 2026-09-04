@@ -17,6 +17,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force && npm run db:seed",
+    "demo:generate": "tsx scripts/generate-synthetic-data.ts",
+    "demo:seed": "tsx scripts/generate-synthetic-data.ts && tsx scripts/seed-demo.ts",
     "db:studio": "prisma studio",
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test"

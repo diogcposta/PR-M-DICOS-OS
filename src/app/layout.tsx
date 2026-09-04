@@ -42,8 +42,8 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
 
         <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto max-w-6xl px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
-            Fase 3 — importação de agenda e KPIs de agenda. Os KPIs financeiros e de pacientes
-            continuam por definir.
+            Fase 4A — demonstração com dados sintéticos avançados. A adaptação aos ficheiros reais
+            do Newsoft (Fase 4) está pendente de amostras anonimizadas.
           </div>
         </footer>
       </body>

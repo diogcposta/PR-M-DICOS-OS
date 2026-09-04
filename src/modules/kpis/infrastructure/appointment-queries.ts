@@ -13,6 +13,7 @@ import {
   EMPTY_STATUS_COUNTS,
 } from "@/modules/kpis/domain/appointment-kpis";
 import type { Period } from "@/modules/kpis/domain/period";
+import type { SourceBatch } from "@/modules/kpis/domain/provenance";
 
 export interface AppointmentFilters {
   readonly organizationId: string;
@@ -160,4 +161,62 @@ export async function sourceBatchIds(
     where: whereClause(filters, period),
   });
   return grouped.map((group) => group.importBatchId);
+}
+
+/** Detalhe dos lotes de origem, para a proveniência do KPI. */
+export async function loadSourceBatches(
+  organizationId: string,
+  batchIds: readonly string[],
+): Promise<readonly SourceBatch[]> {
+  if (batchIds.length === 0) {
+    return [];
+  }
+
+  const batches = await prisma.importBatch.findMany({
+    where: { organizationId, id: { in: [...batchIds] } },
+    orderBy: { committedAt: "desc" },
+    select: {
+      id: true,
+      originalFilename: true,
+      fileHash: true,
+      committedAt: true,
+      importProfile: { select: { isSynthetic: true } },
+    },
+  });
+
+  return batches.map((batch) => ({
+    id: batch.id,
+    originalFilename: batch.originalFilename,
+    shortHash: batch.fileHash.slice(0, 12),
+    committedAt: batch.committedAt,
+    // Sem perfil associado assumimos sintético: é a leitura conservadora, e
+    // enquanto não houver perfil real é sempre a verdadeira.
+    isSynthetic: batch.importProfile?.isSynthetic ?? true,
+  }));
+}
+
+/** Nome da clínica e do médico filtrados, para a proveniência ser legível. */
+export async function describeFilterTargets(
+  organizationId: string,
+  filters: AppointmentFilters,
+): Promise<{ clinic: string | null; practitioner: string | null }> {
+  const [clinic, practitioner] = await Promise.all([
+    filters.clinicId
+      ? prisma.clinic.findFirst({
+          where: { id: filters.clinicId, organizationId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+    filters.practitionerId
+      ? prisma.practitioner.findFirst({
+          where: { id: filters.practitionerId, organizationId },
+          select: { displayName: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    clinic: clinic?.name ?? null,
+    practitioner: practitioner?.displayName ?? null,
+  };
 }

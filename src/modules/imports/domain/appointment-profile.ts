@@ -57,7 +57,7 @@ export type AppointmentMapping = z.infer<typeof appointmentMappingSchema>;
  * Serve para demonstrar o fluxo com as fixtures deste repositório e como ponto
  * de partida editável no ecrã. Não representa o Newsoft.
  */
-export const SYNTHETIC_APPOINTMENT_PROFILE_KEY = "agenda-sintetica";
+export const SYNTHETIC_APPOINTMENT_PROFILE_KEY = "SYNTHETIC_AGENDA_V1";
 export const SYNTHETIC_APPOINTMENT_PROFILE_VERSION = 1;
 
 export const SYNTHETIC_APPOINTMENT_MAPPING: AppointmentMapping = {

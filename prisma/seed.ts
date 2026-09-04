@@ -25,15 +25,15 @@ async function main(): Promise<void> {
     where: { slug: "clinica-demo" },
     update: {},
     create: {
-      name: "Clínica Demo (dados sintéticos)",
+      name: "Organização de demonstração (dados sintéticos)",
       slug: "clinica-demo",
       timezone: "Europe/Lisbon",
     },
   });
 
   const clinics = [
-    { externalId: "DEMO-CL-001", name: "Unidade Norte (demo)" },
-    { externalId: "DEMO-CL-002", name: "Unidade Sul (demo)" },
+    { externalId: "CLINIC-001", name: "CLINIC-001 — Unidade Norte (sintética)" },
+    { externalId: "CLINIC-002", name: "CLINIC-002 — Unidade Sul (sintética)" },
   ];
 
   for (const clinic of clinics) {
@@ -50,8 +50,8 @@ async function main(): Promise<void> {
   }
 
   const practitioners = [
-    { externalId: "DEMO-DR-001", displayName: "Dr. Exemplo Um", specialty: "Medicina dentária" },
-    { externalId: "DEMO-DR-002", displayName: "Dra. Exemplo Dois", specialty: "Ortodontia" },
+    { externalId: "DOCTOR-001", displayName: "DOCTOR-001 (sintético)", specialty: "Medicina dentária" },
+    { externalId: "DOCTOR-002", displayName: "DOCTOR-002 (sintético)", specialty: "Ortodontia" },
   ];
 
   for (const practitioner of practitioners) {
@@ -67,26 +67,27 @@ async function main(): Promise<void> {
     });
   }
 
-  // Perfil de mapeamento propositadamente sintético: não conhecemos ainda os
-  // cabeçalhos reais do Newsoft e não os vamos inventar (ver CLAUDE.md).
+  // Perfil propositadamente sintético. Não conhecemos os cabeçalhos reais do
+  // Newsoft e não os vamos inventar (ver CLAUDE.md): o perfil real será um
+  // registo novo, com chave própria, quando houver uma amostra anonimizada.
   await prisma.importProfile.upsert({
     where: {
       organizationId_key_version: {
         organizationId: organization.id,
-        key: "agenda-sintetica",
+        key: "SYNTHETIC_AGENDA_V1",
         version: 1,
       },
     },
     update: {},
     create: {
       organizationId: organization.id,
-      key: "agenda-sintetica",
+      key: "SYNTHETIC_AGENDA_V1",
       version: 1,
       sourceType: ImportSourceType.APPOINTMENTS,
-      name: "Agenda — perfil sintético (por confirmar com exportação real)",
+      name: "Agenda sintética v1 (perfil de demonstração; não corresponde a nenhuma exportação real)",
       isSynthetic: true,
       mapping: {
-        note: "Placeholder da Fase 1. O mapeamento real é definido na Fase 2, a partir de uma exportação anonimizada.",
+        note: "Perfil de demonstração. Substituído por um perfil real quando existir uma exportação anonimizada; ver README.",
         columns: {},
       },
     },

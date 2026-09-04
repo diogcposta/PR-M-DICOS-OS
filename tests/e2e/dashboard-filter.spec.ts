@@ -47,7 +47,7 @@ test.beforeAll(async ({ request }) => {
   });
 
   expect(response.status()).toBe(201);
-  expect((await response.json()).rowsCommitted).toBe(6);
+  expect((await response.json()).rowsAccepted).toBe(6);
 });
 
 test("filtra o dashboard por período e vê os KPIs recalculados", async ({ page }) => {
@@ -84,7 +84,7 @@ test("mostra a fórmula, o numerador e o denominador de cada KPI", async ({ page
 test("filtrar por clínica muda numerador e denominador", async ({ page }) => {
   await page.goto("/?de=2025-01-01&ate=2025-01-31");
 
-  await page.getByTestId("filter-clinic").selectOption({ label: "Unidade A (teste)" });
+  await page.getByTestId("filter-clinic").selectOption({ label: "CLINIC-001 (teste)" });
   await page.getByTestId("apply-filters").click();
 
   await page.waitForURL(/clinica=/);

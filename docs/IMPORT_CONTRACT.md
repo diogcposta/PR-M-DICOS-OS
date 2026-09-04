@@ -42,3 +42,9 @@ Uma linha validada contém:
 
 Antes de fechar mapeamentos reais, obter exportações anonimizadas de cada área, contendo cabeçalhos e 10–30 linhas representativas. Remover nomes, contactos, observações clínicas e outros dados pessoais.
 
+## Estado da adaptação ao Newsoft (Fase 4)
+
+**Pendente.** Continuamos sem uma única amostra real anonimizada do Newsoft. O perfil de agenda em uso, `SYNTHETIC_AGENDA_V1` (`src/modules/imports/domain/appointment-profile.ts`), é inteiramente inventado para fins de demonstração — cabeçalhos, sinónimos e mapeamento de estados incluídos — e marcado como tal (`isSynthetic: true`) em cada lote que o usa. Nenhum destes nomes deve ser lido como uma hipótese sobre o formato real do Newsoft.
+
+A Fase 4A (dados sintéticos avançados) reforça o que já funciona sem tocar no formato: gerador determinístico de dados de demonstração, relatório de erros descarregável, proveniência dos KPIs e página de qualidade dos dados. Ver "Substituir o perfil sintético por um real" em `README.md` para o procedimento a seguir quando as amostras chegarem.
+

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import type { KpiComparison } from "@/modules/kpis/domain/appointment-kpis";
 import type { KpiDefinition } from "@/modules/kpis/domain/catalog";
+import { type KpiProvenance, describeFilters } from "@/modules/kpis/domain/provenance";
 import { formatRatioAsPercentage } from "@/modules/kpis/domain/ratio";
 
 function formatValue(value: number | null, unit: string): string {
@@ -33,11 +34,13 @@ function formatChange(comparison: KpiComparison): string | null {
 export function KpiCard({
   comparison,
   definition,
+  provenance,
   periodLabel,
   previousPeriodLabel,
 }: {
   readonly comparison: KpiComparison;
   readonly definition: KpiDefinition;
+  readonly provenance: KpiProvenance;
   readonly periodLabel: string;
   readonly previousPeriodLabel: string;
 }) {
@@ -77,38 +80,85 @@ export function KpiCard({
           Como é calculado?
         </summary>
 
-        <dl className="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-400">
+        <dl
+          className="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-400"
+          data-testid={`kpi-${current.key}-provenance`}
+        >
           <div>
             <dt className="font-medium text-slate-700 dark:text-slate-300">Fórmula</dt>
             <dd className="mt-0.5 font-mono">{definition.formula}</dd>
           </div>
           <div>
             <dt className="font-medium text-slate-700 dark:text-slate-300">Numerador</dt>
-            <dd className="mt-0.5 tabular-nums">
-              {current.numerator} ({periodLabel})
-            </dd>
+            <dd className="mt-0.5 tabular-nums">{provenance.numerator}</dd>
           </div>
           <div>
             <dt className="font-medium text-slate-700 dark:text-slate-300">Denominador</dt>
             <dd className="mt-0.5 tabular-nums">
-              {current.denominator === null ? (
+              {provenance.denominator === null ? (
                 "não aplicável — é uma contagem"
-              ) : current.denominator === 0 ? (
+              ) : provenance.denominator === 0 ? (
                 <>0 — sem consultas com desfecho conhecido, por isso não há taxa a apresentar</>
               ) : (
-                current.denominator
+                provenance.denominator
               )}
             </dd>
           </div>
           <div>
+            <dt className="font-medium text-slate-700 dark:text-slate-300">Período utilizado</dt>
+            <dd className="mt-0.5">
+              {periodLabel} ({provenance.timeZone})
+              <br />
+              comparado com {previousPeriodLabel}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-slate-700 dark:text-slate-300">Filtros aplicados</dt>
+            <dd className="mt-0.5">{describeFilters(provenance.filters)}</dd>
+          </div>
+          <div>
             <dt className="font-medium text-slate-700 dark:text-slate-300">Fontes</dt>
-            <dd className="mt-0.5">{definition.sources.join(", ")}</dd>
+            <dd className="mt-0.5">{provenance.sources.join(", ")}</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-slate-700 dark:text-slate-300">
+              Lotes de importação
+            </dt>
+            <dd className="mt-0.5">
+              {provenance.batches.length === 0 ? (
+                "nenhum"
+              ) : (
+                <ul className="space-y-0.5">
+                  {provenance.batches.map((batch) => (
+                    <li key={batch.id}>
+                      <a
+                        href={`/imports/${batch.id}`}
+                        className="underline underline-offset-2"
+                      >
+                        {batch.originalFilename}
+                      </a>{" "}
+                      <span className="font-mono">{batch.shortHash}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-slate-700 dark:text-slate-300">
+              Última atualização dos dados
+            </dt>
+            <dd className="mt-0.5">
+              {provenance.lastUpdatedAt === null
+                ? "sem dados"
+                : provenance.lastUpdatedAt.toISOString().replace("T", " ").slice(0, 16) + " UTC"}
+            </dd>
           </div>
           <div>
             <dt className="font-medium text-slate-700 dark:text-slate-300">Versão da definição</dt>
-            <dd className="mt-0.5">v{current.definitionVersion}</dd>
+            <dd className="mt-0.5">v{provenance.definitionVersion}</dd>
           </div>
-          {definition.definitionApproved ? null : (
+          {provenance.definitionApproved ? null : (
             <div className="pt-1">
               <Badge tone="pending">Definição provisória</Badge>
               <p className="mt-1.5">{definition.openQuestion}</p>

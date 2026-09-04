@@ -3,6 +3,7 @@ import Link from "next/link";
 import { DashboardFilters } from "@/components/dashboard/DashboardFilters";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { MonthlyAppointmentsChart } from "@/components/dashboard/MonthlyAppointmentsChart";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { getAppointmentDashboard } from "@/modules/kpis/application/get-appointment-dashboard";
@@ -71,6 +72,21 @@ export default async function DashboardPage({
         description={`${organization.name} — indicadores de agenda. Período em ${organization.timezone}.`}
       />
 
+      {dashboard.isSynthetic ? (
+        <p
+          data-testid="synthetic-data-banner"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        >
+          <Badge tone="pending">Dados sintéticos</Badge>
+          Estes números vêm de um conjunto gerado para demonstração — nenhuma exportação real do
+          Newsoft foi ainda importada.{" "}
+          <Link href="/qualidade" className="underline underline-offset-4">
+            Ver origem dos dados
+          </Link>
+          .
+        </p>
+      ) : null}
+
       <section aria-labelledby="filtros" className="space-y-3">
         <h2 id="filtros" className="text-sm font-medium text-slate-700 dark:text-slate-300">
           Filtros
@@ -114,6 +130,7 @@ export default async function DashboardPage({
                     key={key}
                     comparison={dashboard.kpis[key]}
                     definition={definition}
+                    provenance={dashboard.provenance[key]}
                     periodLabel={periodLabel}
                     previousPeriodLabel={previousLabel}
                   />
@@ -174,8 +191,8 @@ export default async function DashboardPage({
               </table>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Dados de {dashboard.sourceBatchIds.length}{" "}
-              {dashboard.sourceBatchIds.length === 1 ? "lote importado" : "lotes importados"}. As
+              Dados de {dashboard.batches.length}{" "}
+              {dashboard.batches.length === 1 ? "lote importado" : "lotes importados"}. As
               consultas remarcadas não entram em nenhum total: contam na data para onde foram
               movidas.
             </p>

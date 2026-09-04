@@ -237,6 +237,6 @@ describe("proveniência", () => {
   it("identifica os lotes que originaram os factos do período", async () => {
     await fact({ occurredAt: "2025-01-05T09:00:00.000Z", status: "COMPLETED" });
     const dashboard = await query();
-    expect(dashboard.sourceBatchIds).toEqual([batchId]);
+    expect(dashboard.batches.map((batch) => batch.id)).toEqual([batchId]);
   });
 });

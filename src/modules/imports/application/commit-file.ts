@@ -26,8 +26,22 @@ import { findCommittedBatchByHash } from "@/modules/imports/application/inspect-
  */
 export type RowPolicy = "ALL_OR_NOTHING" | "VALID_ROWS_ONLY";
 
+/**
+ * Destino de cada linha do ficheiro. As três contagens somam sempre `rowsTotal`,
+ * e é isso que permite ao ecrã dizer ao gestor onde foi parar cada linha.
+ */
+export interface RowDisposition {
+  readonly rowsTotal: number;
+  /** Gravadas como facto novo. */
+  readonly rowsAccepted: number;
+  /** Recusadas por erro de validação. */
+  readonly rowsRejected: number;
+  /** Válidas, mas já existentes — repetidas no ficheiro ou já importadas antes. */
+  readonly rowsIgnored: number;
+}
+
 export type CommitOutcome =
-  | { readonly kind: "COMMITTED"; readonly batchId: string; readonly rowsCommitted: number; readonly rowsSkipped: number }
+  | ({ readonly kind: "COMMITTED"; readonly batchId: string } & RowDisposition)
   | { readonly kind: "DUPLICATE"; readonly batchId: string; readonly previousBatchId: string }
   | { readonly kind: "REJECTED"; readonly batchId: string; readonly reason: string };
 
@@ -114,8 +128,6 @@ export async function commitAppointmentFile(input: {
     return reject("Não há nenhuma linha válida para gravar.");
   }
 
-  const rowsSkipped = analysis.rowsTotal - analysis.resolvedRows.length;
-
   const result = await prisma.$transaction(async (tx) => {
     // O perfil de mapeamento é versionado: a mesma chave+versão é reutilizada,
     // para que cada lote possa dizer com que mapeamento foi gravado.
@@ -133,7 +145,7 @@ export async function commitAppointmentFile(input: {
         key: SYNTHETIC_APPOINTMENT_PROFILE_KEY,
         version: SYNTHETIC_APPOINTMENT_PROFILE_VERSION,
         sourceType: ImportSourceType.APPOINTMENTS,
-        name: "Agenda — perfil sintético (por confirmar com exportação real)",
+        name: "Agenda sintética v1 (perfil de demonstração; não corresponde a nenhuma exportação real)",
         isSynthetic: true,
         mapping: input.mapping,
       },
@@ -209,7 +221,11 @@ export async function commitAppointmentFile(input: {
   return {
     kind: "COMMITTED",
     batchId: result.batchId,
-    rowsCommitted: result.rowsCommitted,
-    rowsSkipped,
+    rowsTotal: analysis.rowsTotal,
+    rowsAccepted: result.rowsCommitted,
+    rowsRejected: analysis.rowsInvalid,
+    // O resto são linhas válidas que não geraram facto novo: repetidas dentro
+    // do ficheiro, ou consultas que já tinham entrado num lote anterior.
+    rowsIgnored: analysis.rowsTotal - analysis.rowsInvalid - result.rowsCommitted,
   };
 }
