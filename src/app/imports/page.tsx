@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { listImportBatches } from "@/modules/imports/application/list-import-batches";
@@ -27,15 +29,23 @@ export default async function ImportsPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Importações"
-        description="Histórico dos ficheiros submetidos, com hash abreviado, tipo, estado e contagens de linhas."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeader
+          title="Importações"
+          description="Histórico dos ficheiros submetidos, com hash abreviado, tipo, estado e contagens de linhas."
+        />
+        <Link
+          href="/imports/new"
+          className="shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+        >
+          Importar ficheiro
+        </Link>
+      </div>
 
       {batches.length === 0 ? (
         <EmptyState
           title="Ainda não há lotes importados"
-          description="O carregamento de ficheiros .csv e .xlsx, a pré-visualização, o mapeamento de colunas e a confirmação transacional entram na Fase 2. Esta lista lê a base de dados real e continuará vazia até lá."
+          description="Carregue uma exportação de agenda para ver aqui o histórico. Cada lote guarda o hash do ficheiro, o mapeamento usado e os erros por linha."
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -54,7 +64,11 @@ export default async function ImportsPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {batches.map((batch) => (
                 <tr key={batch.id}>
-                  <td className="px-4 py-3">{batch.originalFilename}</td>
+                  <td className="px-4 py-3">
+                    <Link href={`/imports/${batch.id}`} className="underline underline-offset-4">
+                      {batch.originalFilename}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs">{batch.shortHash}</td>
                   <td className="px-4 py-3">{batch.sourceType}</td>
                   <td className="px-4 py-3">{batch.status}</td>

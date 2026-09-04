@@ -42,8 +42,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
 
         <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="mx-auto max-w-6xl px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
-            Fase 1 — base técnica. A importação de ficheiros e o cálculo de KPIs ainda não estão
-            implementados.
+            Fase 2 — importação de agenda funcional. O cálculo de KPIs ainda não está implementado.
           </div>
         </footer>
       </body>

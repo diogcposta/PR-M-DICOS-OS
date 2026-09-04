@@ -50,10 +50,17 @@ export default async function DashboardPage() {
         <h2 id="indicadores" className="text-sm font-medium text-slate-700 dark:text-slate-300">
           Indicadores
         </h2>
-        <EmptyState
-          title="Ainda não existem dados importados"
-          description={`Nenhum lote foi confirmado nesta organização, por isso não há nada para calcular. Os ${summary.catalogueSize} KPIs do catálogo continuam com a definição por confirmar e não devem produzir números até essa validação. Nada é simulado neste ecrã.`}
-        />
+        {summary.hasImportedData ? (
+          <EmptyState
+            title="Há dados importados, mas ainda nenhum KPI calculável"
+            description={`Estão gravadas ${summary.appointmentFacts} consultas em ${summary.committedBatches} ${summary.committedBatches === 1 ? "lote confirmado" : "lotes confirmados"}. Nenhum dos ${summary.catalogueSize} KPIs do catálogo tem ainda a definição aprovada, por isso não é apresentado nenhum valor: o cálculo entra na Fase 3. Nada é simulado neste ecrã.`}
+          />
+        ) : (
+          <EmptyState
+            title="Ainda não existem dados importados"
+            description={`Nenhum lote foi confirmado nesta organização, por isso não há nada para calcular. Os ${summary.catalogueSize} KPIs do catálogo continuam com a definição por confirmar e não devem produzir números até essa validação. Nada é simulado neste ecrã.`}
+          />
+        )}
       </section>
 
       <section aria-labelledby="estado" className="space-y-3">
