@@ -91,6 +91,20 @@ npm run db:seed
 
 O seed cria uma organização, duas clínicas e dois médicos fictícios. Não cria factos: o dashboard tem de mostrar estados vazios verdadeiros.
 
+## Limpar a base de desenvolvimento
+
+Depois de experimentar importações, para voltar ao estado inicial:
+
+```bash
+npm run db:reset
+```
+
+Isto apaga **todos** os dados da base indicada em `DATABASE_URL`, reaplica as migrações e volta a semear. Nunca correr contra uma base de produção.
+
+O `db:reset` encadeia dois passos de propósito. No Prisma 7 o seed deixou de ser executado automaticamente pelas migrações: o `prisma migrate reset` aplica as migrações e para aí. Sozinho, deixaria a base completamente vazia — sem sequer uma organização, e as páginas mostrariam "Nenhuma organização configurada".
+
+Se for um agente de IA a correr o comando, o Prisma bloqueia-o e exige consentimento explícito do utilizador. É intencional, e o `--force` não substitui esse consentimento.
+
 ## Arrancar
 
 ```bash

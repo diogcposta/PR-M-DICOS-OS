@@ -16,6 +16,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force && npm run db:seed",
     "db:studio": "prisma studio",
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test"
