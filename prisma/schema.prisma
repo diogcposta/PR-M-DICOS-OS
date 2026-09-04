@@ -1,0 +1,379 @@
+// Esquema canónico do PR Médicos OS.
+//
+// Regras aplicadas (ver CLAUDE.md e docs/ARCHITECTURE.md):
+//  - dinheiro em cêntimos inteiros, nunca vírgula flutuante;
+//  - instantes em UTC; o contexto de negócio Europe/Lisbon vive no domínio;
+//  - `organizationId` em todas as tabelas de negócio;
+//  - sem dados pessoais: o paciente entra apenas como referência externa pseudonimizada;
+//  - cada facto guarda o lote e a linha de origem, para o KPI poder explicar-se;
+//  - `stableRowKey` garante idempotência da reimportação (docs/IMPORT_CONTRACT.md).
+//
+// Não existe tabela "NewsoftData": os conceitos ficam separados e os adaptadores
+// de importação absorvem as diferenças de formato.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // A URL vive em prisma.config.ts (convenção do Prisma 7).
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Tipos de exportação suportados pelo importador (docs/IMPORT_CONTRACT.md).
+enum ImportSourceType {
+  APPOINTMENTS
+  PRODUCTION_BILLING
+  BUDGETS
+  PATIENT_STATUS
+  OUTSTANDING_BALANCES
+}
+
+/// Fases do lote: UPLOADED -> PARSED -> MAPPED -> VALIDATED -> COMMITTED,
+/// mais os estados terminais REJECTED, FAILED e DUPLICATE.
+enum ImportBatchStatus {
+  UPLOADED
+  PARSED
+  MAPPED
+  VALIDATED
+  COMMITTED
+  REJECTED
+  FAILED
+  DUPLICATE
+}
+
+enum ImportErrorSeverity {
+  WARNING
+  ERROR
+}
+
+/// Estados normalizados de consulta. UNKNOWN é explícito: um estado da fonte que
+/// ainda não tenha mapeamento aprovado não pode ser silenciosamente convertido.
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  RESCHEDULED
+  UNKNOWN
+}
+
+/// Factos monetários. Produção, faturação e dívida são conceitos distintos e
+/// nunca devem ser somados entre si.
+enum FinancialFactType {
+  PRODUCTION
+  INVOICE
+  DEBT
+}
+
+enum BudgetStatus {
+  PRESENTED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  UNKNOWN
+}
+
+/// Estado de atividade do paciente à data do snapshot.
+/// Apenas valores defensáveis sem definição de negócio aprovada: "inativo",
+/// "perdido" e "reativado" dependem de regras temporais ainda por validar
+/// (D-006 em diante, docs/DECISIONS.md) e por isso não existem aqui.
+enum PatientActivityStatus {
+  ACTIVE
+  UNKNOWN
+}
+
+// ---------------------------------------------------------------------------
+// Entidades de referência
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Europe/Lisbon")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clinics                 Clinic[]
+  practitioners           Practitioner[]
+  importProfiles          ImportProfile[]
+  importBatches           ImportBatch[]
+  appointmentFacts        AppointmentFact[]
+  financialFacts          FinancialFact[]
+  budgetFacts             BudgetFact[]
+  patientStatusSnapshots  PatientStatusSnapshot[]
+
+  @@map("organizations")
+}
+
+model Clinic {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// Identificador da clínica no sistema de origem.
+  externalId     String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointmentFacts       AppointmentFact[]
+  financialFacts         FinancialFact[]
+  budgetFacts            BudgetFact[]
+  patientStatusSnapshots PatientStatusSnapshot[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+  @@map("clinics")
+}
+
+model Practitioner {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// Identificador do profissional na origem. Nem todas as exportações o trazem.
+  externalId     String?
+  /// Nome profissional. Não é dado de paciente; ainda assim nunca vai para logs.
+  displayName    String
+  specialty      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointmentFacts AppointmentFact[]
+  financialFacts   FinancialFact[]
+  budgetFacts      BudgetFact[]
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId])
+  @@map("practitioners")
+}
+
+// ---------------------------------------------------------------------------
+// Importação
+// ---------------------------------------------------------------------------
+
+/// Mapeamento versionado de colunas da origem para o contrato canónico.
+/// `mapping` é JSON porque o formato difere por tipo de exportação; a sua forma
+/// é validada com Zod na camada de aplicação, não pela base de dados.
+model ImportProfile {
+  id             String           @id @default(cuid())
+  organizationId String
+  key            String
+  version        Int
+  sourceType     ImportSourceType
+  name           String
+  /// Verdadeiro enquanto o perfil não for confirmado com uma exportação real
+  /// anonimizada do Newsoft. Nunca assumir cabeçalhos reais sem amostra.
+  isSynthetic    Boolean          @default(true)
+  mapping        Json
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  importBatches ImportBatch[]
+
+  @@unique([organizationId, key, version])
+  @@index([organizationId, sourceType])
+  @@map("import_profiles")
+}
+
+/// Auditoria de cada ficheiro submetido.
+///
+/// Nota sobre duplicados: `(organizationId, fileHash)` é índice e não restrição
+/// única, para que um segundo envio do mesmo ficheiro possa ser registado com
+/// estado DUPLICATE em vez de rebentar. A regra "não reimportar" é aplicada na
+/// camada de aplicação: não pode existir outro lote COMMITTED com o mesmo hash.
+model ImportBatch {
+  id                  String            @id @default(cuid())
+  organizationId      String
+  originalFilename    String
+  /// SHA-256 do conteúdo do ficheiro, em hexadecimal.
+  fileHash            String
+  fileSizeBytes       Int
+  sourceType          ImportSourceType
+  status              ImportBatchStatus @default(UPLOADED)
+  importProfileId     String?
+  importProfileVersion Int?
+  rowsTotal           Int               @default(0)
+  rowsValid           Int               @default(0)
+  rowsInvalid         Int               @default(0)
+  rowsCommitted       Int               @default(0)
+  /// Mensagem de falha em linguagem compreensível. Nunca conteúdo do ficheiro.
+  failureReason       String?
+  uploadedAt          DateTime          @default(now())
+  committedAt         DateTime?
+  updatedAt           DateTime          @updatedAt
+
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  importProfile          ImportProfile?          @relation(fields: [importProfileId], references: [id], onDelete: SetNull)
+  rowErrors              ImportRowError[]
+  appointmentFacts       AppointmentFact[]
+  financialFacts         FinancialFact[]
+  budgetFacts            BudgetFact[]
+  patientStatusSnapshots PatientStatusSnapshot[]
+
+  @@index([organizationId, fileHash])
+  @@index([organizationId, status])
+  @@index([organizationId, uploadedAt])
+  @@map("import_batches")
+}
+
+model ImportRowError {
+  id              String              @id @default(cuid())
+  importBatchId   String
+  sourceRowNumber Int
+  /// Coluna da origem, quando o erro é atribuível a uma.
+  columnName      String?
+  /// Código estável para tradução e agregação (ex.: DATE_FORMAT_INVALID).
+  code            String
+  message         String
+  severity        ImportErrorSeverity @default(ERROR)
+  createdAt       DateTime            @default(now())
+
+  importBatch ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@index([importBatchId, sourceRowNumber])
+  @@index([importBatchId, severity])
+  @@map("import_row_errors")
+}
+
+// ---------------------------------------------------------------------------
+// Factos
+// ---------------------------------------------------------------------------
+
+model AppointmentFact {
+  id                 String            @id @default(cuid())
+  organizationId     String
+  clinicId           String
+  practitionerId     String?
+  /// Referência pseudonimizada do paciente. Nunca nome nem contacto.
+  patientExternalRef String?
+  /// Identificador do registo na origem, quando existe.
+  sourceRecordId     String?
+  /// Chave estável derivada de campos normalizados. Garante idempotência.
+  stableRowKey       String
+  occurredAt         DateTime
+  status             AppointmentStatus
+  /// Estado tal como veio da origem, para auditoria do mapeamento.
+  sourceStatusLabel  String?
+  durationMinutes    Int?
+  importBatchId      String
+  sourceRowNumber    Int
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  practitioner Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  importBatch  ImportBatch   @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, stableRowKey])
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, clinicId, occurredAt])
+  @@index([organizationId, practitionerId, occurredAt])
+  @@index([organizationId, status, occurredAt])
+  @@index([importBatchId])
+  @@map("appointment_facts")
+}
+
+model FinancialFact {
+  id                 String            @id @default(cuid())
+  organizationId     String
+  clinicId           String
+  practitionerId     String?
+  patientExternalRef String?
+  sourceRecordId     String?
+  stableRowKey       String
+  type               FinancialFactType
+  /// Montante em cêntimos. Valores negativos representam reversões/notas de
+  /// crédito e devem ser somados, nunca filtrados silenciosamente.
+  amountCents        Int
+  currency           String            @default("EUR")
+  occurredAt         DateTime
+  importBatchId      String
+  sourceRowNumber    Int
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  practitioner Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  importBatch  ImportBatch   @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, stableRowKey])
+  @@index([organizationId, type, occurredAt])
+  @@index([organizationId, clinicId, type, occurredAt])
+  @@index([organizationId, practitionerId, type, occurredAt])
+  @@index([importBatchId])
+  @@map("financial_facts")
+}
+
+model BudgetFact {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  clinicId           String
+  practitionerId     String?
+  patientExternalRef String?
+  sourceRecordId     String?
+  stableRowKey       String
+  status             BudgetStatus @default(UNKNOWN)
+  amountCents        Int
+  currency           String       @default("EUR")
+  presentedAt        DateTime
+  acceptedAt         DateTime?
+  importBatchId      String
+  sourceRowNumber    Int
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clinic       Clinic        @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  practitioner Practitioner? @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  importBatch  ImportBatch   @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, stableRowKey])
+  @@index([organizationId, presentedAt])
+  @@index([organizationId, clinicId, status, presentedAt])
+  @@index([importBatchId])
+  @@map("budget_facts")
+}
+
+/// Estado ou saldo do paciente a uma data de referência.
+/// Só deve ser preenchido quando a semântica da exportação estiver validada.
+model PatientStatusSnapshot {
+  id                   String                @id @default(cuid())
+  organizationId       String
+  clinicId             String
+  patientExternalRef   String?
+  sourceRecordId       String?
+  stableRowKey         String
+  /// Data de referência do snapshot (instante UTC do início do dia de negócio).
+  snapshotDate         DateTime
+  status               PatientActivityStatus @default(UNKNOWN)
+  /// Estado tal como veio da origem, para auditoria do mapeamento.
+  sourceStatusLabel    String?
+  /// Saldo em dívida à data, em cêntimos.
+  outstandingCents     Int?
+  lastAppointmentAt    DateTime?
+  nextAppointmentAt    DateTime?
+  importBatchId        String
+  sourceRowNumber      Int
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clinic       Clinic       @relation(fields: [clinicId], references: [id], onDelete: Restrict)
+  importBatch  ImportBatch  @relation(fields: [importBatchId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, stableRowKey])
+  @@index([organizationId, snapshotDate])
+  @@index([organizationId, clinicId, snapshotDate])
+  @@index([importBatchId])
+  @@map("patient_status_snapshots")
+}

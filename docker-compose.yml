@@ -1,0 +1,24 @@
+# Base de dados local para quem tenha Docker disponível.
+# Alternativa suportada (macOS sem Docker): PostgreSQL via Homebrew — ver README.md.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: pr-medicos-os-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pr_medicos
+      POSTGRES_PASSWORD: pr_medicos_dev
+      POSTGRES_DB: pr_medicos_os
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - pr_medicos_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pr_medicos -d pr_medicos_os"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pr_medicos_pgdata:
