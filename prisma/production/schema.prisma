@@ -1,0 +1,275 @@
+// Esquema do módulo "Produção clínica" (Clinical Production Dashboard).
+//
+// Base SQLite local, separada da base PostgreSQL do PR Médicos OS (D-033).
+// Regras (ver docs/PRODUCAO.md):
+//  - dinheiro em cêntimos inteiros (`*Cents`), percentagens em pontos-base (`*Bps`, 5000 = 50%);
+//  - datas de negócio como data civil `yyyy-MM-dd` (Europe/Lisbon) e horas como minutos desde
+//    a meia-noite: são registos manuais do médico, não instantes vindos de outro sistema;
+//  - sem dados identificáveis de pacientes: um caso é apenas um Case ID (ex.: DC-2026-001);
+//  - todas as tabelas de negócio têm `doctorId` (o equivalente de `organizationId` aqui);
+//  - enums guardados como texto e validados com Zod, para o esquema migrar sem alterações
+//    para PostgreSQL/Supabase (basta trocar `provider` e o adaptador).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../../src/generated/production"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model DoctorProfile {
+  id                       String   @id @default(cuid())
+  name                     String
+  /// Percentagem da produção recebida pelo médico, em pontos-base (5000 = 50%).
+  feeBps                   Int      @default(5000)
+  /// Base dos honorários: BILLED (valor faturado, por omissão) ou NET (faturado − custos diretos).
+  feeBase                  String   @default("BILLED")
+  /// Duração da consulta standard, em minutos.
+  standardSlotMinutes      Int      @default(45)
+  /// Duração aproximada dos sábados ocasionais, em minutos.
+  saturdayMinutes          Int      @default(210)
+  /// Objetivo principal (€/h, em cêntimos) usado no score de eficiência.
+  primaryGoalCentsPerHour  Int      @default(10000)
+  /// Taxa de faltas de referência para insights, em pontos-base (500 = 5%).
+  targetNoShowBps          Int      @default(500)
+  followUpMinCents         Int      @default(50000)
+  followUpPriorityCents    Int      @default(150000)
+  followUpFirstAlertDays   Int      @default(7)
+  followUpSecondAlertDays  Int      @default(30)
+  timeZone                 String   @default("Europe/Lisbon")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  scheduleBlocks ScheduleBlock[]
+  goals          ProductionGoal[]
+  scenarios      Scenario[]
+  clinicalDays   ClinicalDay[]
+  cases          ClinicalCase[]
+  procedures     Procedure[]
+  sessions       ProcedureSession[]
+  templates      ProcedureTemplate[]
+  absences       AbsenceEvent[]
+  plans          TreatmentPlan[]
+  imports        ProductionImport[]
+
+  @@map("doctor_profiles")
+}
+
+/// Horário habitual: um bloco por período de trabalho (ex.: segunda 09:30–12:30).
+model ScheduleBlock {
+  id          String @id @default(cuid())
+  doctorId    String
+  /// 1 = segunda … 6 = sábado, 7 = domingo (ISO 8601).
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, weekday])
+  @@map("schedule_blocks")
+}
+
+model ProductionGoal {
+  id             String @id @default(cuid())
+  doctorId       String
+  label          String
+  centsPerHour   Int
+  sortOrder      Int    @default(0)
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, sortOrder])
+  @@map("production_goals")
+}
+
+/// Cenários do simulador (Atual, Meta 12 meses, Meta longo prazo).
+model Scenario {
+  id            String  @id @default(cuid())
+  doctorId      String
+  name          String
+  /// Nulo = usar o €/h medido no mês corrente.
+  centsPerHour  Int?
+  hoursPerMonth Float
+  sortOrder     Int     @default(0)
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, sortOrder])
+  @@map("scenarios")
+}
+
+/// Um dia clínico. `status` = WORKED (realizado) ou PLANNED (previsto, conta só para projeções).
+model ClinicalDay {
+  id           String   @id @default(cuid())
+  doctorId     String
+  date         String
+  startMinute  Int
+  endMinute    Int
+  breakMinutes Int      @default(0)
+  status       String   @default("WORKED")
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date])
+  @@map("clinical_days")
+}
+
+/// Agrupador anónimo de atos, consultas e planos do mesmo tratamento.
+model ClinicalCase {
+  id        String   @id @default(cuid())
+  doctorId  String
+  /// Identificador anónimo, ex.: DC-2026-001. Nunca nome ou número de utente.
+  code      String
+  createdAt DateTime @default(now())
+
+  doctor     DoctorProfile   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  procedures Procedure[]
+  plans      TreatmentPlan[]
+
+  @@unique([doctorId, code])
+  @@map("clinical_cases")
+}
+
+/// Um ato com receita própria. O tempo de cadeira vem das suas consultas (`sessions`):
+/// uma coroa em 3 consultas é um único procedimento com 3 sessões e uma única receita.
+model Procedure {
+  id              String   @id @default(cuid())
+  doctorId        String
+  caseId          String?
+  /// Data de referência da produção (normalmente a do ato/faturação).
+  date            String
+  procedureType   String
+  category        String
+  listPriceCents  Int
+  billedCents     Int
+  /// PRIVATE | INSURANCE | AGREEMENT
+  payerType       String   @default("PRIVATE")
+  payerName       String?
+  plannedVisits   Int      @default(1)
+  labCostCents    Int      @default(0)
+  otherCostCents  Int      @default(0)
+  /// Observação operacional. Nunca informação clínica identificável.
+  note            String?
+  completed       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  doctor   DoctorProfile      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  case     ClinicalCase?      @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  sessions ProcedureSession[]
+
+  @@index([doctorId, date])
+  @@index([doctorId, procedureType])
+  @@index([caseId])
+  @@map("procedures")
+}
+
+/// Uma consulta (tempo de cadeira) associada a um procedimento.
+model ProcedureSession {
+  id          String @id @default(cuid())
+  doctorId    String
+  procedureId String
+  date        String
+  startMinute Int
+  endMinute   Int
+
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  procedure Procedure     @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, date])
+  @@index([procedureId])
+  @@map("procedure_sessions")
+}
+
+/// Templates e favoritos para registo rápido.
+model ProcedureTemplate {
+  id              String  @id @default(cuid())
+  doctorId        String
+  name            String
+  category        String
+  priceCents      Int
+  durationMinutes Int
+  plannedVisits   Int     @default(1)
+  labCostCents    Int     @default(0)
+  payerType       String  @default("PRIVATE")
+  favorite        Boolean @default(false)
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, name])
+  @@map("procedure_templates")
+}
+
+/// Falta ou cancelamento. NO_SHOW | LATE_CANCEL | EARLY_CANCEL
+model AbsenceEvent {
+  id                  String   @id @default(cuid())
+  doctorId            String
+  date                String
+  startMinute         Int
+  durationMinutes     Int
+  plannedProcedure    String?
+  estimatedValueCents Int      @default(0)
+  payerType           String   @default("PRIVATE")
+  kind                String
+  slotRecovered       Boolean  @default(false)
+  /// Receita realizada por quem ocupou a vaga (lista de espera).
+  recoveredValueCents Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId, date])
+  @@map("absence_events")
+}
+
+/// PRESENTED | PARTIALLY_ACCEPTED | ACCEPTED | REJECTED | PENDING | COMPLETED
+model TreatmentPlan {
+  id                    String   @id @default(cuid())
+  doctorId              String
+  caseId                String
+  presentedDate         String
+  /// Valor diagnosticado (pode ser superior ao apresentado).
+  diagnosedCents        Int
+  totalCents            Int
+  phases                Int      @default(1)
+  status                String   @default("PRESENTED")
+  acceptedCents         Int      @default(0)
+  performedCents        Int      @default(0)
+  lastContactDate       String?
+  nextAppointmentBooked Boolean  @default(false)
+  note                  String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  case   ClinicalCase  @relation(fields: [caseId], references: [id], onDelete: Restrict)
+
+  @@index([doctorId, presentedDate])
+  @@index([doctorId, status])
+  @@map("treatment_plans")
+}
+
+/// Registo de cada ficheiro CSV importado (SHA-256 impede reimportar o mesmo ficheiro).
+model ProductionImport {
+  id               String   @id @default(cuid())
+  doctorId         String
+  entity           String
+  originalFilename String
+  fileHash         String
+  rowsTotal        Int
+  rowsImported     Int
+  rowsSkipped      Int
+  rowsInvalid      Int
+  createdAt        DateTime @default(now())
+
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, fileHash])
+  @@map("production_imports")
+}

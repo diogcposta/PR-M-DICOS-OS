@@ -22,3 +22,8 @@ src/generated/
 /playwright-report/
 /blob-report/
 .playwright/
+
+# Base local do módulo Produção clínica (dados do médico — nunca no git)
+data/
+*.db
+*.db-journal

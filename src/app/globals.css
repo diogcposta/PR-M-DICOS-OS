@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/*
+ * Tema: segue o sistema por omissão e pode ser forçado com `data-theme` no
+ * <html> (botão claro/escuro no cabeçalho, guardado em localStorage).
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -13,16 +28,44 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0a;
     --foreground: #ededed;
+    color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* Impressão do relatório mensal (Guardar como PDF no browser). */
+@media print {
+  header, footer, nav, .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  section {
+    break-inside: avoid;
+  }
 }
 
 /*
@@ -42,6 +85,11 @@ body {
   --series-2: #eb6834; /* laranja */
   --series-3: #1baf7a; /* aqua */
   --series-4: #eda100; /* amarelo */
+  --series-muted: #cbd5e1;
+  --viz-grid: #e2e8f0;
+  --viz-axis: #64748b;
+  --viz-tooltip-bg: #ffffff;
+  --viz-tooltip-border: #e2e8f0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -50,6 +98,11 @@ body {
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
+    --series-muted: #475569;
+    --viz-grid: #1e293b;
+    --viz-axis: #94a3b8;
+    --viz-tooltip-bg: #0f172a;
+    --viz-tooltip-border: #334155;
   }
 }
 
@@ -58,4 +111,17 @@ body {
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
+  --series-muted: #475569;
+  --viz-grid: #1e293b;
+  --viz-axis: #94a3b8;
+  --viz-tooltip-bg: #0f172a;
+  --viz-tooltip-border: #334155;
+}
+
+/* Status (reservados: bom / atenção / sério / crítico) — sempre com ícone e texto. */
+:root {
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
 }

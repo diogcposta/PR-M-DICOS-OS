@@ -37,7 +37,37 @@
 | D-031 | Página `/qualidade` como fonte única de verdade sobre o estado dos dados: lotes, motivos de rejeição agregados, campos opcionais em falta e meses sem dados dentro do intervalo coberto | aceite (Fase 4A) |
 | D-032 | Testes de isolamento entre organizações usam deliberadamente os mesmos identificadores externos (`CLINIC-001`, `DOCTOR-001`) nas duas organizações de teste, para provar que o isolamento vem da chave composta `(organizationId, externalId)` e não de identificadores que por acaso não colidem | aceite (Fase 4A) |
 
+| D-033 | Clinical Production Dashboard como módulo `modules/production` do mesmo monólito, com base **SQLite** própria (Prisma 7 + `@prisma/adapter-better-sqlite3`), separada da PostgreSQL da clínica. Pedido explícito do médico: local, gratuito, sem servidor. Esquema portável para PostgreSQL/Supabase | aceite |
+| D-034 | Datas de negócio do módulo de produção como data civil `yyyy-MM-dd` e horas como minutos desde a meia-noite (Europe/Lisbon implícito): são registos manuais, não instantes de outro sistema; evita conversões de fuso e erros de DST. `createdAt`/`updatedAt` continuam em UTC | aceite |
+| D-035 | Um procedimento tem **uma** receita e N consultas (sessões). €/h do procedimento = faturado ÷ Σ duração das consultas. Casos (Case ID) agregam procedimentos. Nunca se divide a receita por consulta | aceite |
+| D-036 | Dois €/h distintos e sempre rotulados: **€/h clínico** (produção ÷ horas dos dias clínicos, inclui tempo sem marcação — é o do dashboard e dos objetivos) e **€/h de cadeira** (receita ÷ horas de consulta — rentabilidade por procedimento) | aceite |
+| D-037 | A produção conta na data do procedimento (não na data de cada consulta). O tempo de cadeira de um procedimento conta inteiro no seu €/h, mesmo que as consultas atravessem meses; a ocupação da agenda usa as datas reais das consultas | aceite |
+| D-038 | Honorários = produção × percentagem, com **um único arredondamento** sobre o total do mês. Base configurável: faturado (omissão, como pedido) ou faturado − custos diretos | aceite; ver dúvida abaixo |
+| D-039 | "Faltas" = faltas + cancelamentos tardios; cancelamentos antecipados ficam fora da taxa (houve tempo para reocupar). Taxa = faltas ÷ (consultas realizadas + faltas). Horas perdidas = duração das faltas não recuperadas. Receita líquida perdida = estimada − recuperada (nunca negativa) | aceite, **por validar com o médico** |
+| D-040 | Ocupação teórica = (trabalhado + perdido por faltas) ÷ disponível; real = trabalhado ÷ disponível; trabalhado = união das consultas de cada dia (sobreposições contam uma vez) e só em dias com registo | aceite |
+| D-041 | Consultas sobrepostas no mesmo dia são **recusadas** ao gravar (mensagem indica a consulta em conflito) | aceite |
+| D-042 | Taxa de aceitação principal por valor (aceite ÷ apresentado), também mostrada por número; denominador = todos os planos apresentados no período, incluindo os ainda sem decisão | aceite, **por validar** |
+| D-043 | Follow-up: só planos em aberto sem próxima consulta marcada; > €500 → follow-up; > €1.500 → prioritário; sem resposta ≥ 7 / ≥ 30 dias desde o último contacto (ou apresentação) → 1.º / 2.º alerta. Limiares editáveis. Sem mensagens a pacientes | aceite |
+| D-044 | Clinical Efficiency Score: média ponderada de 6 componentes 0–1 (€/h vs objetivo 30, ocupação real 20, faltas 15, aceitação 15, utilização do horário 10, follow-up 10); componentes sem dados são excluídos e os pesos renormalizados. Rotulado como indicador operacional, nunca de qualidade clínica | aceite |
+| D-045 | Insights e ações por regras determinísticas, com frases descritivas ("X apresenta A €/h vs média B €/h"). Um teste proíbe linguagem prescritiva de tratamentos | aceite |
+| D-046 | Simulador: €/h por hora clínica que já reflete a taxa de faltas atual; mudar as faltas escala o €/h por (1 − nova)/(1 − atual). Valor aceite de planos mostrado à parte, não somado à produção (contaria duas vezes as mesmas horas). Anual = mensal × meses de trabalho (11 por omissão, editável) | aceite |
+| D-047 | Sem shadcn/ui: componentes próprios com Tailwind e elementos nativos acessíveis (o shadcn exigiria Radix, cva, tailwind-merge e o CLI para ~10 componentes simples). Recharts para os gráficos (pedido; justifica-se com 10+ gráficos com tooltip) — substitui D-024 só neste módulo | aceite |
+| D-048 | Formatação monetária fixa `€8.619` / `€4.309,50` (convenção pedida) em vez de `Intl` pt-PT (`8619,00 €`): igual no servidor e no browser, sem avisos de hidratação | aceite |
+| D-049 | Importação CSV do módulo de produção por adaptadores (`ImportSource`); hoje só o formato nativo (= exportação). Pré-visualização, SHA-256, transação única, lote bloqueado por linhas inválidas salvo escolha explícita (D-008), linhas com `id` existente ignoradas | aceite |
+| D-050 | Texto livre (observações, seguradora) recusa emails e números de telefone/utente; Case ID validado (`DC-2026-001`) | aceite |
+| D-051 | `/` redireciona para `/producao` quando `DATABASE_URL` não está definido, para o médico usar o dashboard sem instalar PostgreSQL | aceite |
+
 ## Dúvidas por resolver
+
+### Clinical Production Dashboard
+
+- **"A aplicação deve funcionar no appscripts"**: não é claro se se refere ao Google Apps Script. Next.js + SQLite não corre no Apps Script (sem Node.js nem sistema de ficheiros). Implementado como aplicação local (`npm run dev`, abre no browser do MacBook/iPad na mesma rede). Se o objetivo for Google Apps Script/Sheets, é preciso decidir: (a) exportar CSV para uma folha, ou (b) uma versão reduzida em Apps Script.
+- **Base dos honorários**: o pedido diz "produção × 50%". Em muitas clínicas o laboratório é descontado antes da percentagem. A base é configurável (D-038); confirmar qual se aplica ao contrato.
+- **Faltas**: confirmar que cancelamentos antecipados não contam como falta e que os tardios contam (D-039).
+- **Taxa de aceitação**: planos ainda sem decisão contam no denominador (D-042) — num mês em curso a taxa parece baixa.
+- **Data da produção**: hoje é a data do procedimento (1.ª consulta). Se a clínica fatura na conclusão, a produção deve passar para a data da última consulta.
+
+### Módulo Clínica
 
 - **Validação das fórmulas de agenda**: as definições de D-019 a D-021 estão implementadas e testadas, mas foram decididas por nós. Precisam de confirmação do responsável de negócio antes de `definitionApproved` passar a `true`.
 - **Definições de negócio**: "ativo", "inativo", "perdido" e "reativado" continuam sem definição aprovada. Os KPIs correspondentes estão bloqueados no catálogo.

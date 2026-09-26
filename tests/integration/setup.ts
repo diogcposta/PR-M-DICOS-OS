@@ -13,7 +13,7 @@ const testUrl = process.env.TEST_DATABASE_URL;
 
 if (!testUrl) {
   throw new Error(
-    "TEST_DATABASE_URL não está definido. Veja a secção de testes no README.md.",
+    "TEST_DATABASE_URL não está definido. Veja a secção Qualidade em docs/CLINICA.md.",
   );
 }
 

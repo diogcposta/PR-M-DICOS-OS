@@ -109,3 +109,24 @@ export interface AIAnalysisProvider {
 
 `AnalysisInput` contém período, filtros, definições e métricas agregadas. `AnalysisResult` contém observações estruturadas, evidências numéricas e avisos. O dashboard funciona com `DisabledAIProvider`; qualquer integração futura é um adaptador de infraestrutura selecionado por configuração.
 
+
+## Módulo "Produção clínica" (Clinical Production Dashboard)
+
+Acrescentado como um segundo módulo do mesmo monólito (D-033). Mesmas fronteiras:
+
+```text
+src/modules/production/
+  domain/          cálculos puros: métricas, faltas, planos/follow-up, objetivos,
+                   simulador, score, insights, agenda, tempo e formatação (sem Prisma/Next)
+  application/     casos de uso: comandos, consultas, validação Zod, CSV, relatório
+  infrastructure/  CSV (papaparse) e SHA-256
+  demo/            dados sintéticos determinísticos (setembro 2026 = €8.619 / 130,5 h)
+src/lib/db/production.ts   cliente Prisma SQLite (adaptador better-sqlite3)
+src/app/producao/**        páginas, server actions e rotas de exportação (só composição)
+prisma/production/         esquema e migrações SQLite (cliente gerado em src/generated/production)
+```
+
+Base própria SQLite (`data/producao.db`), separada da PostgreSQL da clínica: funciona sem servidor.
+O esquema usa só tipos portáveis (inteiros em cêntimos, texto para datas civis e enums validados por Zod),
+pelo que migrar para PostgreSQL/Supabase é trocar `provider` e adaptador. Definições e fórmulas em
+`docs/PRODUCAO.md`.

@@ -87,6 +87,14 @@ Definir apenas o contrato `AIAnalysisProvider` e uma implementação `DisabledAI
 
 O contrato recebe um `AnalysisInput` com métricas agregadas e devolve um `AnalysisResult` estruturado. O fornecedor é escolhido por configuração. Uma futura implementação OpenAI deve ficar em `modules/ai/providers/openai` e poderá usar a Responses API com saída estruturada. Nunca enviar nomes, contactos, notas clínicas ou linhas brutas de pacientes para um fornecedor de IA.
 
+## Módulo "Produção clínica" (Clinical Production Dashboard)
+
+Segundo módulo do monólito, pedido pelo médico: análise da sua produção pessoal (`/producao`,
+`src/modules/production`). Exceção explícita à stack acima: base **SQLite** local própria (D-033),
+esquema portável para PostgreSQL. Registos manuais com Case ID anónimo; datas civis e minutos
+(D-034). Fórmulas em `docs/PRODUCAO.md`. Nunca gerar recomendações clínicas ("faz mais X"):
+insights descrevem números e as ações são operacionais.
+
 ## Qualidade e modo de trabalho
 
 - Trabalhar numa fase de cada vez.
