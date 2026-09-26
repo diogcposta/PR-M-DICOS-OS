@@ -10,12 +10,26 @@ incentivar sobretratamento.
 - Sem serviços pagos nem IA externa: tudo corre no seu computador, com uma base SQLite local.
 - Indicadores operacionais/económicos — **não medem qualidade clínica**.
 
+> **No iPhone, sem computador ligado:** existe uma versão **Google Apps Script** que corre na sua conta
+> Google, guarda os dados numa folha Google Sheets e abre no Safari do iPhone. Instalação passo a passo
+> em [`apps-script/README.md`](apps-script/README.md) — basta copiar 4 ficheiros de `apps-script/dist/`.
+
 > O repositório contém também o módulo **Clínica** (importações Newsoft, PostgreSQL), documentado
 > em [`docs/CLINICA.md`](docs/CLINICA.md). O dashboard de produção não depende dele.
 
 ---
 
-## Começar em 3 passos
+## Duas formas de usar
+
+| | Versão Google Apps Script | Versão local (Next.js) |
+|---|---|---|
+| Onde corre | Conta Google (grátis) | O seu computador |
+| iPhone | Sim, em qualquer lado (Safari, ícone no ecrã principal) | Só na mesma rede Wi-Fi, com o computador ligado |
+| Dados | Folha Google Sheets sua | Ficheiro SQLite local |
+| Instalação | Copiar 4 ficheiros ([guia](apps-script/README.md)) | `npm install` + 2 comandos |
+| Cálculos | Os mesmos (código partilhado) | Os mesmos |
+
+## Começar em 3 passos (versão local)
 
 Requisitos: **Node.js 20.19+ ou 22+** (macOS: `brew install node`). Nada mais.
 
@@ -95,6 +109,8 @@ abril–agosto para as tendências.
 | `npm run test:producao` | Testes unitários + testes da aplicação contra SQLite temporário |
 | `npm run test:e2e:producao` | Playwright: fluxo crítico (desktop) e responsividade (iPhone). Em ambientes sem browsers descarregados: `PLAYWRIGHT_CHROMIUM_PATH=/caminho/chromium` |
 | `npm run lint` / `npm run typecheck` | ESLint / TypeScript estrito |
+| `npm run gas:build` / `npm run gas:preview` | Versão Apps Script: gerar `apps-script/dist/` / pré-visualizar em http://localhost:3400 |
+| `npm run test:e2e:gas` | Playwright da versão Apps Script (iPhone e desktop) |
 | `DATABASE_URL=… npm run build && npm start` | Build de produção (o módulo Clínica exige `DATABASE_URL` no build; qualquer URL PostgreSQL serve se não o usar) |
 
 Testes do módulo Clínica (PostgreSQL): ver [`docs/CLINICA.md`](docs/CLINICA.md#qualidade).
@@ -166,6 +182,7 @@ dos dados entre ligações, e responsividade/ausência de erros em largura de iP
 ## Roadmap
 
 1. Validar com o médico as definições marcadas "por validar" (`docs/DECISIONS.md`).
+1. Importação CSV na versão Apps Script (migrar dados da versão local).
 2. Adaptador de importação Newsoft (quando houver exportações reais anonimizadas).
 3. PDF gerado no servidor para o relatório mensal (hoje: imprimir/guardar PDF no browser).
 4. Autenticação e migração para PostgreSQL/Supabase para acesso fora de casa.

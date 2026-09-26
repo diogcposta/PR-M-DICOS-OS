@@ -27,3 +27,8 @@ src/generated/
 data/
 *.db
 *.db-journal
+
+# Apps Script: pré-visualização local e credenciais do clasp
+apps-script/.preview/
+apps-script/.clasp.json
+.clasprc.json

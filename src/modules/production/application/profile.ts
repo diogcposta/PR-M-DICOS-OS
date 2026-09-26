@@ -6,6 +6,7 @@ import { productionDb, type ProductionDb } from "@/lib/db/production";
 
 import type { FeeSettings } from "../domain/metrics";
 import type { FollowUpRules } from "../domain/plans";
+import { feeSettingsOf, followUpRulesOf } from "../domain/views";
 
 import {
   DEFAULT_GOALS,
@@ -38,16 +39,11 @@ export async function getOrCreateProfile(db: ProductionDb = productionDb) {
 export type Profile = Awaited<ReturnType<typeof getOrCreateProfile>>;
 
 export function feeSettings(profile: Profile): FeeSettings {
-  return { feeBps: profile.feeBps, feeBase: profile.feeBase === "NET" ? "NET" : "BILLED" };
+  return feeSettingsOf(profile);
 }
 
 export function followUpRules(profile: Profile): FollowUpRules {
-  return {
-    minCents: profile.followUpMinCents,
-    priorityCents: profile.followUpPriorityCents,
-    firstAlertDays: profile.followUpFirstAlertDays,
-    secondAlertDays: profile.followUpSecondAlertDays,
-  };
+  return followUpRulesOf(profile);
 }
 
 export async function getSettings(db: ProductionDb = productionDb) {

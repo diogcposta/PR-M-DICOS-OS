@@ -6,15 +6,12 @@
  */
 import { productionDb, type ProductionDb } from "@/lib/db/production";
 
-import { agreementImpact, analyseCases, insurerAnalysis, overallChairCentsPerHour, payerComparison, profitabilityMatrix, procedureMetrics, type ProcedureRecord, type SessionRecord } from "../domain/metrics";
-import { gapToNextGoal, projectGoals } from "../domain/goals";
-import { buildInsights, followUpHealth, topActions, type InsightInput } from "../domain/insights";
-import { summariseMonth, type AbsenceRecord, type ClinicalDayRecord, type MonthlySummary, type PlanRecord } from "../domain/monthly";
-import { followUpList, openPlanCents, treatmentFunnel } from "../domain/plans";
-import { efficiencyScore } from "../domain/score";
+import { procedureMetrics, type ProcedureRecord, type SessionRecord } from "../domain/metrics";
+import type { AbsenceRecord, ClinicalDayRecord, MonthlySummary, PlanRecord } from "../domain/monthly";
 import { addMonths, monthOf, monthRange, monthsEndingAt, todayInLisbon } from "../domain/time";
+import { buildSuggestions, dashboardView, monthlySeries, plansView, profitabilityView } from "../domain/views";
 
-import { feeSettings, followUpRules, getOrCreateProfile, type Profile } from "./profile";
+import { feeSettings, getOrCreateProfile, type Profile } from "./profile";
 
 // ---------------------------------------------------------------------------
 // Carregamento e conversão
@@ -111,25 +108,12 @@ function toPlanRecord(p: PlanRow): PlanRecord {
   };
 }
 
-function monthSlice(data: RangeData, month: string) {
-  const inMonth = (d: string) => monthOf(d) === month;
-  return {
-    month,
-    days: data.days.filter((d) => inMonth(d.date)),
-    procedures: data.procedures.filter((p) => inMonth(p.date)),
-    sessions: data.sessions.filter((s) => inMonth(s.date)),
-    absences: data.absences.filter((a) => inMonth(a.date)),
-    plans: data.plans.filter((p) => inMonth(p.presentedDate)),
-  };
-}
-
 /** Resumos de `count` meses terminando em `lastMonth`, com uma única ida à base. */
 export async function monthlySummaries(lastMonth: string, count: number, db: ProductionDb = productionDb) {
   const profile = await getOrCreateProfile(db);
   const months = monthsEndingAt(lastMonth, count);
   const data = await loadRange(db, profile, monthRange(months[0]!).from, monthRange(lastMonth).to);
-  const fees = feeSettings(profile);
-  return months.map((m) => summariseMonth(monthSlice(data, m), fees));
+  return monthlySeries(data, profile, lastMonth, count);
 }
 
 async function allPlans(db: ProductionDb, doctorId: string, upTo?: string) {
@@ -159,7 +143,6 @@ export async function defaultMonth(db: ProductionDb = productionDb): Promise<str
 
 export async function getDashboard(month: string, db: ProductionDb = productionDb) {
   const profile = await getOrCreateProfile(db);
-  const fees = feeSettings(profile);
   const range = monthRange(month);
   const trendMonths = monthsEndingAt(month, 6);
   const [data, goals, plansUpTo] = await Promise.all([
@@ -167,54 +150,8 @@ export async function getDashboard(month: string, db: ProductionDb = productionD
     db.productionGoal.findMany({ where: { doctorId: profile.id }, orderBy: { centsPerHour: "asc" } }),
     allPlans(db, profile.id, range.to),
   ]);
-
-  const summaries = trendMonths.map((m) => summariseMonth(monthSlice(data, m), fees));
-  const current = summaries.at(-1)!;
-  const previous = summaries.at(-2) ?? null;
-  const monthProcedures = data.procedures.filter((p) => monthOf(p.date) === month);
-
-  const today = todayInLisbon();
-  const referenceDate = today < range.to ? today : range.to;
-  const followUps = followUpList(plansUpTo, referenceDate, followUpRules(profile));
-  const openCents = openPlanCents(plansUpTo);
-  const overdueCents = followUps.filter((f) => f.alertLevel > 0).reduce((s, f) => s + f.openCents, 0);
-
-  const insightInput: InsightInput = {
-    current,
-    previous,
-    categories: profitabilityMatrix(monthProcedures, fees, "category"),
-    procedureTypes: profitabilityMatrix(monthProcedures, fees, "procedureType"),
-    insurers: insurerAnalysis(monthProcedures),
-    followUps,
-    overallChairCph: overallChairCentsPerHour(monthProcedures),
-    targetNoShowRate: profile.targetNoShowBps / 10_000,
-  };
-
-  const goalInputs = goals.map((g) => ({ label: g.label, centsPerHour: g.centsPerHour }));
-
-  return {
-    profile,
-    month,
-    current,
-    previous,
-    summaries,
-    goals: projectGoals(goalInputs, current.centsPerHour, current.clinicalMinutes, profile.feeBps),
-    gap: gapToNextGoal(goalInputs, current.centsPerHour),
-    insights: buildInsights(insightInput),
-    actions: topActions(insightInput),
-    followUps,
-    score: efficiencyScore({
-      centsPerHour: current.centsPerHour,
-      goalCentsPerHour: profile.primaryGoalCentsPerHour,
-      realOccupancy: current.agenda.realOccupancy,
-      theoreticalOccupancy: current.agenda.theoreticalOccupancy,
-      missedRate: current.absences.missedRate,
-      acceptanceRateByValue: current.plans.acceptanceRateByValue,
-      followUpHealth: followUpHealth(openCents, overdueCents),
-    }),
-    funnel: treatmentFunnel(data.plans.filter((p) => monthOf(p.presentedDate) === month)),
-    insightInput,
-  };
+  const view = dashboardView({ ...data, plans: plansUpTo }, profile, goals, month, todayInLisbon());
+  return { profile, ...view };
 }
 
 export type Dashboard = Awaited<ReturnType<typeof getDashboard>>;
@@ -225,25 +162,11 @@ export type Dashboard = Awaited<ReturnType<typeof getDashboard>>;
 
 export async function getProfitability(from: string, to: string, db: ProductionDb = productionDb) {
   const profile = await getOrCreateProfile(db);
-  const fees = feeSettings(profile);
-  const [procedures, lowestGoal] = await Promise.all([
+  const [procedures, goals] = await Promise.all([
     loadProcedures(from, to, db),
-    db.productionGoal.findFirst({ where: { doctorId: profile.id }, orderBy: { centsPerHour: "asc" } }),
+    db.productionGoal.findMany({ where: { doctorId: profile.id } }),
   ]);
-  const lowest = lowestGoal?.centsPerHour ?? null;
-  return {
-    profile,
-    procedures,
-    lowestGoalCph: lowest,
-    perProcedure: procedures.map((p) => ({ record: p, metrics: procedureMetrics(p, fees, lowest) })),
-    byType: profitabilityMatrix(procedures, fees, "procedureType"),
-    byCategory: profitabilityMatrix(procedures, fees, "category"),
-    overallChairCph: overallChairCentsPerHour(procedures),
-    payer: payerComparison(procedures),
-    insurers: insurerAnalysis(procedures),
-    agreement: agreementImpact(procedures),
-    cases: analyseCases(procedures),
-  };
+  return { profile, ...profitabilityView(procedures, profile, goals) };
 }
 
 // ---------------------------------------------------------------------------
@@ -253,94 +176,19 @@ export async function getProfitability(from: string, to: string, db: ProductionD
 export async function getPlansOverview(from: string, to: string, db: ProductionDb = productionDb) {
   const profile = await getOrCreateProfile(db);
   const plans = await allPlans(db, profile.id);
-  const inRange = plans.filter((p) => p.presentedDate >= from && p.presentedDate <= to);
   const rows = await db.treatmentPlan.findMany({
     where: { doctorId: profile.id },
     include: { case: { select: { code: true } } },
     orderBy: { presentedDate: "desc" },
   });
-  return {
-    profile,
-    plans: rows,
-    inRange,
-    funnel: treatmentFunnel(inRange),
-    followUps: followUpList(plans, todayInLisbon(), followUpRules(profile)),
-    notAdvanced: inRange.filter(
-      (p) => p.status === "REJECTED" || ((p.status === "PRESENTED" || p.status === "PENDING" || p.status === "PARTIALLY_ACCEPTED") && p.totalCents > p.acceptedCents),
-    ),
-  };
+  return { profile, plans: rows, ...plansView(plans, profile, from, to, todayInLisbon()) };
 }
 
 // ---------------------------------------------------------------------------
 // Registo rápido: sugestões a partir do histórico
 // ---------------------------------------------------------------------------
 
-export interface ProcedureSuggestion {
-  readonly procedureType: string;
-  readonly category: string;
-  readonly count: number;
-  /** Mediana da duração da primeira consulta, em minutos. */
-  readonly usualDurationMinutes: number | null;
-  /** Preço mais frequente (moda), em cêntimos. */
-  readonly usualPriceCents: number;
-  readonly usualListPriceCents: number;
-  readonly usualPayerType: string;
-  readonly usualPayerName: string | null;
-  readonly usualLabCostCents: number;
-  readonly usualVisits: number;
-}
-
-function mode<T>(values: readonly T[]): T | undefined {
-  const counts = new Map<T, number>();
-  let best: T | undefined;
-  let bestCount = 0;
-  for (const v of values) {
-    const c = (counts.get(v) ?? 0) + 1;
-    counts.set(v, c);
-    if (c > bestCount) {
-      best = v;
-      bestCount = c;
-    }
-  }
-  return best;
-}
-
-function median(values: readonly number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2);
-}
-
-/** Sugestões por tipo de procedimento (a partir de 2 registos). */
-export function buildSuggestions(procedures: readonly ProcedureRecord[]): ProcedureSuggestion[] {
-  const byType = new Map<string, ProcedureRecord[]>();
-  for (const p of procedures) {
-    const list = byType.get(p.procedureType) ?? [];
-    list.push(p);
-    byType.set(p.procedureType, list);
-  }
-  return [...byType.entries()]
-    .filter(([, list]) => list.length >= 2)
-    .map(([procedureType, list]) => {
-      const payer = mode(list.map((p) => p.payerType)) ?? "PRIVATE";
-      return {
-        procedureType,
-        category: mode(list.map((p) => p.category)) ?? "Outro",
-        count: list.length,
-        usualDurationMinutes: median(
-          list.flatMap((p) => (p.sessions[0] ? [p.sessions[0].endMinute - p.sessions[0].startMinute] : [])),
-        ),
-        usualPriceCents: mode(list.map((p) => p.billedCents)) ?? 0,
-        usualListPriceCents: mode(list.map((p) => p.listPriceCents)) ?? 0,
-        usualPayerType: payer,
-        usualPayerName: mode(list.filter((p) => p.payerType === payer).map((p) => p.payerName)) ?? null,
-        usualLabCostCents: mode(list.map((p) => p.labCostCents)) ?? 0,
-        usualVisits: mode(list.map((p) => p.plannedVisits)) ?? 1,
-      };
-    })
-    .sort((a, b) => b.count - a.count);
-}
+export { buildSuggestions, type ProcedureSuggestion } from "../domain/views";
 
 export async function getEntryContext(date: string, db: ProductionDb = productionDb) {
   const profile = await getOrCreateProfile(db);

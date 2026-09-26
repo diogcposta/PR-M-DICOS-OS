@@ -94,6 +94,9 @@ Segundo módulo do monólito, pedido pelo médico: análise da sua produção pe
 esquema portável para PostgreSQL. Registos manuais com Case ID anónimo; datas civis e minutos
 (D-034). Fórmulas em `docs/PRODUCAO.md`. Nunca gerar recomendações clínicas ("faz mais X"):
 insights descrevem números e as ações são operacionais.
+Existe também uma versão **Google Apps Script** (`apps-script/`, D-052): Google Sheets como base de
+dados, cliente mobile-first para iPhone, mesmo domínio (`domain/views.ts`). Depois de alterar o domínio
+ou `apps-script/src`, correr `npm run gas:build` e versionar `apps-script/dist/`.
 
 ## Qualidade e modo de trabalho
 

@@ -56,12 +56,19 @@
 | D-049 | Importação CSV do módulo de produção por adaptadores (`ImportSource`); hoje só o formato nativo (= exportação). Pré-visualização, SHA-256, transação única, lote bloqueado por linhas inválidas salvo escolha explícita (D-008), linhas com `id` existente ignoradas | aceite |
 | D-050 | Texto livre (observações, seguradora) recusa emails e números de telefone/utente; Case ID validado (`DC-2026-001`) | aceite |
 | D-051 | `/` redireciona para `/producao` quando `DATABASE_URL` não está definido, para o médico usar o dashboard sem instalar PostgreSQL | aceite |
+| D-052 | Versão **Google Apps Script** (pedido do médico: "funcionar no Apps Script" e acessível no iPhone): aplicação web HtmlService + Google Sheets como base de dados, na conta do médico, implementação "Executar como eu / Apenas eu". Resolve a dúvida anterior sobre "appscripts" | aceite |
+| D-053 | Um só domínio para as duas versões: a composição dos ecrãs passou para `domain/views.ts` (puro), usada pela app Next e pelo cliente Apps Script; validação com os mesmos esquemas Zod. Nenhuma fórmula duplicada | aceite |
+| D-054 | No Apps Script, o servidor só valida e grava; os cálculos correm no browser (iPhone) sobre todos os registos. Uma ida ao servidor por ação (a resposta traz os dados atualizados), JSON explícito, operação única `api(nome, args)` com lista fechada de operações, `LockService` nas escritas | aceite |
+| D-055 | Folha com cabeçalhos em português lidos pelo nome; datas e horas como texto (`aaaa-mm-dd`, `HH:mm`, formato `@`) para o Sheets não as converter em datas; booleanos como "sim"/"não"; dinheiro em cêntimos. A leitura tolera datas convertidas e `dd/mm/aaaa` editados à mão | aceite |
+| D-056 | Build com esbuild para 4 ficheiros copiáveis (`Codigo.gs`, `Servidor.gs`, `Index.html`, `appsscript.json`) versionados em `apps-script/dist/`: o médico instala sem Node.js; um teste falha se `dist/` estiver desatualizado. Traduções do Zod excluídas do bundle (mensagens são próprias) | aceite |
+| D-057 | Cliente sem framework (HTML escapado + SVG próprio): página única de ~120 KB, rápida no iPhone; campos a 16 px (sem zoom do Safari), barra inferior com áreas seguras, tema claro/escuro do sistema. Pré-visualização local com folha simulada para testes E2E | aceite |
 
 ## Dúvidas por resolver
 
 ### Clinical Production Dashboard
 
-- **"A aplicação deve funcionar no appscripts"**: não é claro se se refere ao Google Apps Script. Next.js + SQLite não corre no Apps Script (sem Node.js nem sistema de ficheiros). Implementado como aplicação local (`npm run dev`, abre no browser do MacBook/iPad na mesma rede). Se o objetivo for Google Apps Script/Sheets, é preciso decidir: (a) exportar CSV para uma folha, ou (b) uma versão reduzida em Apps Script.
+- ~~"A aplicação deve funcionar no appscripts"~~ — confirmado: Google Apps Script, acessível no iPhone. Resolvido em D-052.
+- **Importação CSV na versão Apps Script**: não existe (os dados podem ser colados diretamente na folha, respeitando os cabeçalhos). Acrescentar se for preciso migrar da versão local.
 - **Base dos honorários**: o pedido diz "produção × 50%". Em muitas clínicas o laboratório é descontado antes da percentagem. A base é configurável (D-038); confirmar qual se aplica ao contrato.
 - **Faltas**: confirmar que cancelamentos antecipados não contam como falta e que os tardios contam (D-039).
 - **Taxa de aceitação**: planos ainda sem decisão contam no denominador (D-042) — num mês em curso a taxa parece baixa.

@@ -26,7 +26,7 @@ export default defineConfig({
         test: {
           name: "production",
           environment: "node",
-          include: ["tests/production/**/*.test.ts"],
+          include: ["tests/production/**/*.test.ts", "tests/apps-script/**/*.test.ts"],
           testTimeout: 30_000,
         },
       },
