@@ -17,3 +17,15 @@ test("todas as páginas: sem scroll horizontal nem erros, com a demonstração",
   }
   expect(errors).toEqual([]);
 });
+
+test("Início no iPhone: mês e «+ Registar» na mesma linha, com a mesma altura", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "só no tamanho iPhone");
+  await page.goto(`/?db=header-${Date.now()}&hoje=2026-09-26#/`);
+  const month = await page.locator(".page-title input[type=month]").boundingBox();
+  const button = await page.locator(".page-title a.btn.primary", { hasText: "Registar" }).boundingBox();
+  const actions = await page.locator(".page-title .actions").boundingBox();
+  expect(month && button && actions).toBeTruthy();
+  expect(Math.abs(month!.y - button!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(month!.height - button!.height)).toBeLessThanOrEqual(1);
+  expect(button!.x + button!.width).toBeCloseTo(actions!.x + actions!.width, 0); // ocupa a largura toda
+});

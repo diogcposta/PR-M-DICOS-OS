@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Api, dispatch, type Env } from "../../apps-script/src/server/api";
-import { decodeCell, encodeCell, SheetDb } from "../../apps-script/src/server/sheets";
+import { decodeCell, encodeCell, SheetDb, type SpreadsheetLike } from "../../apps-script/src/server/sheets";
 import { TABLES } from "../../apps-script/src/server/tables";
 import { FakeSpreadsheet } from "../../apps-script/src/preview/fake-sheets";
 import { buildState } from "../../apps-script/src/client/state";
@@ -149,5 +149,60 @@ describe("demonstração no Sheets", () => {
     const csv = exportCsv(state, "procedimentos");
     expect(csv.startsWith("﻿id;data;case_id;procedimento")).toBe(true);
     expect(csv).toMatch(/02\/09\/2026 09:30-11:00\|09\/09\/2026 09:30-10:15/);
+  });
+});
+
+describe("leitura em lote (serviço avançado Sheets)", () => {
+  /** Como o Sheets.Values.batchGet: separadores inteiros, sem células vazias no fim das linhas. */
+  function withBatchRead(s: FakeSpreadsheet) {
+    const calls = { readTables: 0, getSheetByName: 0 };
+    const sheet: SpreadsheetLike = {
+      getSheetByName: (name) => (calls.getSheetByName++, s.getSheetByName(name)),
+      insertSheet: (name) => s.insertSheet(name),
+      readTables: (names) => {
+        calls.readTables++;
+        return names.map((name) => {
+          const found = s.getSheetByName(name);
+          if (!found) throw new Error(`Unable to parse range: '${name}'`);
+          return found.rows.map((row) => {
+            const cells = [...row];
+            while (cells.length && (cells.at(-1) === "" || cells.at(-1) === null)) cells.pop();
+            return cells;
+          });
+        });
+      },
+    };
+    return { sheet, calls };
+  }
+
+  it("abrir a app lê todos os separadores numa só chamada, com os mesmos dados", () => {
+    call("loadDemo");
+    const expected = call("getData").data;
+    const { sheet, calls } = withBatchRead(spreadsheet);
+    const data = JSON.parse(dispatch({ ...env, spreadsheet: sheet }, "getData", [])).data;
+    expect(data).toEqual(expected);
+    expect(calls).toEqual({ readTables: 1, getSheetByName: 0 });
+  });
+
+  it("gravar lê uma vez e devolve os dados atualizados sem reler a folha", () => {
+    new Api(env).setup();
+    const { sheet, calls } = withBatchRead(spreadsheet);
+    const r = JSON.parse(dispatch({ ...env, spreadsheet: sheet }, "createAbsence", [{ date: "2026-09-03", start: "10:00", durationMinutes: "45", kind: "NO_SHOW", estimatedValue: "60" }]));
+    expect(r.ok).toBe(true);
+    expect(r.data.absences).toHaveLength(1);
+    expect(calls.readTables).toBe(1);
+    expect(call("getData").data.absences).toEqual(r.data.absences); // gravado na folha
+  });
+
+  it("sem separadores (antes de configurar) volta à leitura normal e cria-os", () => {
+    const { sheet, calls } = withBatchRead(spreadsheet);
+    const data = JSON.parse(dispatch({ ...env, spreadsheet: sheet }, "getData", [])).data;
+    expect(data.profile.name).toBe("Diogo Costa");
+    expect(calls.readTables).toBe(1);
+    expect(spreadsheet.getSheetByName("Procedimentos")).not.toBeNull();
+  });
+
+  it("horas lidas como texto formatado (\"9:30:00\")", () => {
+    expect(decodeCell("9:30:00", { field: "x", header: "x", type: "time" })).toBe(570);
   });
 });
