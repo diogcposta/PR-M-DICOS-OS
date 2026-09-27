@@ -7,11 +7,13 @@
  */
 import type { ZodError } from "zod";
 
-import { DEFAULT_GOALS, DEFAULT_PROFILE, DEFAULT_SCENARIOS, DEFAULT_SCHEDULE, DEFAULT_TEMPLATES } from "@/modules/production/application/defaults";
+import { DEFAULT_EXAM_TYPES, DEFAULT_GOALS, DEFAULT_PROFILE, DEFAULT_SCENARIOS, DEFAULT_SCHEDULE, DEFAULT_TEMPLATES } from "@/modules/production/application/defaults";
 import { InputError } from "@/modules/production/application/parse";
 import {
   absenceSchema,
   clinicalDaySchema,
+  examSchema,
+  examTypeSchema,
   fieldErrors,
   planSchema,
   procedureSchema,
@@ -24,7 +26,7 @@ import { buildDemoDataset } from "@/modules/production/demo/dataset";
 import { findOverlap, formatTime } from "@/modules/production/domain/time";
 
 import { SheetDb, type SpreadsheetLike } from "./sheets";
-import type { Row, TableKey } from "./tables";
+import { TABLES, type Row, type TableKey } from "./tables";
 
 export interface Env {
   readonly spreadsheet: SpreadsheetLike;
@@ -57,6 +59,8 @@ export interface AppData {
   readonly sessions: Row[];
   readonly absences: Row[];
   readonly plans: Row[];
+  readonly exams: Row[];
+  readonly examTypes: Row[];
 }
 
 class RuleError extends Error {
@@ -81,10 +85,19 @@ export class Api {
   /** Cria os separadores e o perfil com os valores iniciais. Idempotente. */
   setup(): string[] {
     return this.env.withLock(() => {
-      const created = this.db.ensureTables();
+      const created = this.ensureTables();
       this.ensureProfile();
       return created;
     });
+  }
+
+  /** Cria os separadores em falta; um separador de tipos de exame novo recebe os tipos iniciais. */
+  private ensureTables(): string[] {
+    const created = this.db.ensureTables();
+    if (created.includes(TABLES.examTypes.name)) {
+      this.db.insertMany("examTypes", DEFAULT_EXAM_TYPES.map((t) => ({ id: this.env.newId(), ...t })));
+    }
+    return created;
   }
 
   private ensureProfile(): Row {
@@ -101,7 +114,7 @@ export class Api {
 
   /** Carrega todas as tabelas numa só leitura; sem isso, garante que os separadores existem. */
   private load(): void {
-    if (!this.db.preload()) this.db.ensureTables();
+    if (!this.db.preload()) this.ensureTables();
   }
 
   getData(): AppData {
@@ -121,6 +134,8 @@ export class Api {
       sessions: this.db.read("sessions"),
       absences: this.db.read("absences"),
       plans: this.db.read("plans"),
+      exams: this.db.read("exams"),
+      examTypes: [...this.db.read("examTypes")].sort((a, b) => String(a.name).localeCompare(String(b.name), "pt")),
     };
   }
 
@@ -292,6 +307,41 @@ export class Api {
   }
 
   // -------------------------------------------------------------------------
+  // Exames (ortopantomografia, CBCT…)
+  // -------------------------------------------------------------------------
+
+  createExam(form: Form): ApiResult {
+    return this.run(form, examSchema, (x) => {
+      this.db.insert("exams", {
+        id: this.env.newId(),
+        date: x.date,
+        examType: x.examType,
+        caseCode: x.caseCode,
+        billedCents: x.billed,
+        note: x.note,
+        createdAt: this.env.nowIso(),
+      });
+    }, "Exame registado.");
+  }
+
+  deleteExam(id: string): ApiResult {
+    return this.mutate(() => void this.db.remove("exams", id), "Exame apagado.");
+  }
+
+  /** Grava um tipo de exame; se já existir um com o mesmo nome, atualiza o valor habitual. */
+  saveExamType(form: Form): ApiResult {
+    return this.run(form, examTypeSchema, (t) => {
+      const existing = this.db.read("examTypes").find((x) => String(x.name).toLowerCase() === t.name.toLowerCase());
+      if (existing) this.db.update("examTypes", String(existing.id), { ...existing, priceCents: t.price });
+      else this.db.insert("examTypes", { id: this.env.newId(), name: t.name, priceCents: t.price });
+    }, "Tipo de exame gravado.");
+  }
+
+  deleteExamType(id: string): ApiResult {
+    return this.mutate(() => void this.db.remove("examTypes", id), "Tipo de exame apagado.");
+  }
+
+  // -------------------------------------------------------------------------
   // Planos
   // -------------------------------------------------------------------------
 
@@ -438,13 +488,14 @@ export class Api {
       this.db.replaceAll("sessions", sessions);
       this.db.replaceAll("absences", demo.absences.map((a) => ({ id: this.env.newId(), ...a })));
       this.db.replaceAll("plans", demo.plans.map((p) => ({ id: this.env.newId(), ...p, note: null })));
+      this.db.replaceAll("exams", []);
     }, "Dados de demonstração carregados.");
   }
 
-  /** Apaga todos os registos (dias, procedimentos, consultas, faltas, planos). */
+  /** Apaga todos os registos (dias, procedimentos, consultas, faltas, planos, exames). */
   clearRecords(): ApiResult {
     return this.mutate(() => {
-      for (const key of ["days", "procedures", "sessions", "absences", "plans"] as const) this.db.replaceAll(key, []);
+      for (const key of ["days", "procedures", "sessions", "absences", "plans", "exams"] as const) this.db.replaceAll(key, []);
     }, "Registos apagados. As definições mantêm-se.");
   }
 }
@@ -469,6 +520,10 @@ export const OPERATIONS = [
   "saveTemplate",
   "toggleFavorite",
   "deleteTemplate",
+  "createExam",
+  "deleteExam",
+  "saveExamType",
+  "deleteExamType",
   "loadDemo",
   "clearRecords",
 ] as const;

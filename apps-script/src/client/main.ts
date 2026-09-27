@@ -11,6 +11,7 @@ import { call } from "./transport";
 import { esc } from "./ui";
 import { insurance, profitability, report, simulator, trends } from "./views/analysis";
 import { dashboard } from "./views/dashboard";
+import { exams } from "./views/exams";
 import { data, more, planDetail, plans, settings } from "./views/manage";
 import { absences, agenda, days, formValues, procedureDetail, procedures, register, registerHooks, showErrors } from "./views/records";
 import type { Ctx, View } from "./views/types";
@@ -23,6 +24,7 @@ const ROUTES: Record<string, (ctx: Ctx) => View> = {
   dias: days,
   agenda,
   faltas: absences,
+  exames: exams,
   planos: plans,
   plano: planDetail,
   rentabilidade: profitability,
@@ -43,7 +45,7 @@ const TABS: Array<[string, string, string]> = [
   ["planos", "Planos", "✓"],
   ["mais", "Mais", "☰"],
 ];
-const MORE = new Set(["procedimentos", "procedimento", "dias", "faltas", "rentabilidade", "seguros", "simulador", "tendencias", "relatorio", "definicoes", "dados", "mais", "plano"]);
+const MORE = new Set(["procedimentos", "procedimento", "dias", "faltas", "exames", "rentabilidade", "seguros", "simulador", "tendencias", "relatorio", "definicoes", "dados", "mais", "plano"]);
 
 let state: State | null = null;
 

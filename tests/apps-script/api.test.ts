@@ -6,6 +6,7 @@ import { TABLES } from "../../apps-script/src/server/tables";
 import { FakeSpreadsheet } from "../../apps-script/src/preview/fake-sheets";
 import { buildState } from "../../apps-script/src/client/state";
 import { exportCsv } from "../../apps-script/src/client/views/manage";
+import { examTotals } from "@/modules/production/domain/exams";
 import { dashboardView, profitabilityView } from "@/modules/production/domain/views";
 
 let spreadsheet: FakeSpreadsheet;
@@ -204,5 +205,89 @@ describe("leitura em lote (serviço avançado Sheets)", () => {
 
   it("horas lidas como texto formatado (\"9:30:00\")", () => {
     expect(decodeCell("9:30:00", { field: "x", header: "x", type: "time" })).toBe(570);
+  });
+});
+
+describe("exames (ortopantomografia, CBCT…)", () => {
+  it("honorários à mesma percentagem dos atos, fora da produção clínica e do €/hora", () => {
+    call("saveDay", { date: "2026-09-02", start: "09:30", end: "19:00", breakMinutes: "120" });
+    call("createProcedure", { date: "2026-09-02", procedureType: "Restauração", category: "Dentisteria", billed: "70", plannedVisits: "1", start: "09:30", end: "10:15" });
+    const before = buildState(call("getData").data);
+    const without = dashboardView(before.records, before.profile, before.goals, "2026-09", before.today).current;
+
+    expect(call("createExam", { date: "2026-09-02", examType: "Ortopantomografia", billed: "30", caseCode: "dc-2026-001" }).ok).toBe(true);
+    const r = call("createExam", { date: "2026-09-10", examType: "CBCT", billed: "80,50" });
+    expect(r.ok).toBe(true);
+    call("createExam", { date: "2026-08-31", examType: "CBCT", billed: "80" }); // outro mês
+
+    const state = buildState(r.data);
+    expect(state.exams.map((x) => [x.examType, x.billedCents, x.caseCode])).toEqual([
+      ["Ortopantomografia", 3000, "DC-2026-001"],
+      ["CBCT", 8050, null],
+    ]);
+    const t = examTotals(buildState(call("getData").data).exams, "2026-09-01", "2026-09-30", state.profile.feeBps);
+    expect(t).toMatchObject({ count: 2, billedCents: 11_050, feeCents: 1_500 + 4_025 });
+    expect(t.byType.map((x) => x.examType)).toEqual(["CBCT", "Ortopantomografia"]);
+
+    const after = buildState(call("getData").data);
+    const withExams = dashboardView(after.records, after.profile, after.goals, "2026-09", after.today).current;
+    expect(withExams.productionCents).toBe(without.productionCents);
+    expect(withExams.centsPerHour).toBe(without.centsPerHour);
+  });
+
+  it("um arredondamento ao cêntimo por exame e só dentro do período", () => {
+    const exams = [
+      { id: "a", date: "2026-09-01", examType: "CBCT", caseCode: null, billedCents: 1 },
+      { id: "b", date: "2026-09-30", examType: "CBCT", caseCode: null, billedCents: 1 },
+      { id: "c", date: "2026-10-01", examType: "CBCT", caseCode: null, billedCents: 10_000 },
+    ];
+    expect(examTotals(exams, "2026-09-01", "2026-09-30", 5000)).toMatchObject({ count: 2, billedCents: 2, feeCents: 2 });
+  });
+
+  it("recusa campos inválidos, com mensagem por campo", () => {
+    const bad = call("createExam", { date: "2026-02-30", examType: "", billed: "0", caseCode: "Maria Silva" });
+    expect(bad.ok).toBe(false);
+    expect(Object.keys(bad.errors)).toEqual(expect.arrayContaining(["date", "examType", "billed", "caseCode"]));
+  });
+
+  it("tipos de exame: iniciais sem valor, valor habitual editável e apagar", () => {
+    new Api(env).setup();
+    let types = call("getData").data.examTypes;
+    expect(types.map((t: { name: string; priceCents: number }) => [t.name, t.priceCents])).toEqual([["CBCT", 0], ["Ortopantomografia", 0]]);
+    const saved = call("saveExamType", { name: "cbct", price: "80" });
+    expect(saved.ok).toBe(true);
+    types = saved.data.examTypes;
+    expect(types).toHaveLength(2);
+    expect(types.find((t: { name: string }) => t.name === "CBCT").priceCents).toBe(8000);
+    const orto = types.find((t: { name: string }) => t.name === "Ortopantomografia");
+    expect(call("deleteExamType", orto.id).data.examTypes).toHaveLength(1);
+    expect(new Api(env).setup()).toEqual([]); // não volta a criar os tipos apagados
+    expect(call("getData").data.examTypes).toHaveLength(1);
+  });
+
+  it("instalação anterior (sem separadores de exames): são criados ao abrir, com os tipos iniciais", () => {
+    new Api(env).setup();
+    spreadsheet.sheets.delete("Exames");
+    spreadsheet.sheets.delete("TiposExame");
+    const data = call("getData").data;
+    expect(data.exams).toEqual([]);
+    expect(data.examTypes).toHaveLength(2);
+    expect(spreadsheet.getSheetByName("Exames")!.rows[0]).toEqual(["id", "data", "exame", "case_id", "valor_cent", "observacao", "criado_em"]);
+  });
+
+  it("apagar todos os registos e a demonstração limpam os exames; as definições mantêm-se", () => {
+    call("createExam", { date: "2026-09-02", examType: "CBCT", billed: "80" });
+    expect(call("clearRecords").data.exams).toEqual([]);
+    call("createExam", { date: "2026-09-02", examType: "CBCT", billed: "80" });
+    const demo = call("loadDemo").data;
+    expect(demo.exams).toEqual([]);
+    expect(demo.examTypes.length).toBeGreaterThan(0);
+  });
+
+  it("exportação CSV dos exames", () => {
+    const r = call("createExam", { date: "2026-09-02", examType: "CBCT", billed: "80,5", caseCode: "DC-2026-007" });
+    const csv = exportCsv(buildState(r.data), "exames");
+    expect(csv).toMatch(/^﻿id;data;exame;case_id;valor;observacao\r\n/);
+    expect(csv).toMatch(/;02\/09\/2026;CBCT;DC-2026-007;80,50;\r\n$/);
   });
 });

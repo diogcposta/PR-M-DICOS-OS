@@ -48,3 +48,12 @@ export const DEFAULT_TEMPLATES = [
   { name: "Urgência", category: "Urgência", priceCents: 5_000, durationMinutes: 30, plannedVisits: 1, labCostCents: 0, favorite: false },
   { name: "Controlo", category: "Controlo", priceCents: 0, durationMinutes: 15, plannedVisits: 1, labCostCents: 0, favorite: false },
 ] as const;
+
+/**
+ * Tipos de exame iniciais (editáveis nas Definições). Sem valor predefinido: o
+ * preço de cada exame depende da clínica e é indicado pelo médico.
+ */
+export const DEFAULT_EXAM_TYPES = [
+  { name: "Ortopantomografia", priceCents: 0 },
+  { name: "CBCT", priceCents: 0 },
+] as const;

@@ -81,8 +81,12 @@ npx @google/clasp push
 ## Utilização
 
 A barra inferior tem **Início** (dashboard), **Registar** (procedimento em < 20 s), **Agenda**, **Planos** e
-**Mais** (procedimentos, dias clínicos, faltas, rentabilidade, seguros, What if?, tendências, relatório,
-definições, dados). Tudo o resto funciona como na versão local — ver o [README principal](../README.md).
+**Mais** (procedimentos, dias clínicos, faltas, exames, rentabilidade, seguros, What if?, tendências, relatório,
+definições, dados).
+
+**Exames** (ortopantomografia, CBCT…): em **Mais › Exames** escolha o tipo, a data e o valor (o valor habitual de
+cada tipo define-se em **Definições › Exames**). Recebe a mesma percentagem dos atos; os exames aparecem à parte no
+Início ("Exames" e "Total a receber") e não mexem na produção nem no €/hora. Tudo o resto funciona como na versão local — ver o [README principal](../README.md).
 
 - Cada gravação demora 1–2 s (é o tempo do Google Apps Script). A primeira abertura do dia pode demorar mais.
 - O `appsscript.json` ativa o serviço avançado **Sheets** (lê todos os separadores numa só chamada; não pede
@@ -102,6 +106,7 @@ definições, dados). Tudo o resto funciona como na versão local — ver o [REA
 | Consultas | Tempo de cadeira de cada procedimento (`procedimento_id`) |
 | Faltas | Faltas e cancelamentos |
 | Planos | Planos de tratamento |
+| Exames, TiposExame | Exames (ortopantomografia, CBCT…) e o valor habitual de cada tipo |
 
 Valores monetários em cêntimos inteiros (`60000` = €600). Datas `aaaa-mm-dd` e horas `HH:mm` guardadas como texto.
 

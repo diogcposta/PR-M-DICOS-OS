@@ -144,7 +144,7 @@ details.more summary, details summary { cursor: pointer; font-weight: 600; font-
 .actions-list li { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .actions-list li:last-child { border-bottom: 0; }
 .actions-list p { margin: 0 0 2px; }
-.num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.actions-list .num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
 .rank { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
 .rank li span { display: inline-block; max-width: 70%; }
 .rank li { display: list-item; }

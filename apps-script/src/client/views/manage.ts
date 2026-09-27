@@ -149,7 +149,16 @@ export function settings(ctx: Ctx): View {
           ${checkbox("favorite", "Favorito", false)}
         </div>
         <div class="form-actions"><button type="submit" class="btn primary">Gravar template</button></div>
-      </form>`, { id: "templates" })}`;
+      </form>`, { id: "templates" })}
+    ${section("Exames", html`
+      ${state.examTypes.length === 0 ? empty("Sem tipos de exame.") : html`<ul class="card list">${state.examTypes.map((t) => html`<li class="row"><span><strong>${t.name}</strong> <span class="muted small">· ${t.priceCents > 0 ? euros(t.priceCents) : "sem valor habitual"}</span></span><button class="btn ghost small" data-op="deleteExamType" data-id="${t.id}" data-confirm="Apagar este tipo de exame? Os exames já registados mantêm-se.">Apagar</button></li>`)}</ul>`}
+      <form class="card pad form" data-op="saveExamType" data-reset aria-label="Tipo de exame">
+        <div class="grid">
+          ${field({ label: "Exame", name: "name", required: true, hint: "Um nome que já exista atualiza o valor." })}
+          ${field({ label: "Valor habitual (€)", name: "price", inputmode: "decimal" })}
+        </div>
+        <div class="form-actions"><button type="submit" class="btn primary">Gravar exame</button></div>
+      </form>`, { id: "exames", desc: `Recebe ${percent(p.feeBps / 10_000, 0)} do valor de cada exame (a mesma percentagem dos atos). Os exames não entram na produção clínica nem no €/hora.` })}`;
   return { title: "Definições", body };
 }
 
@@ -179,6 +188,8 @@ export function exportCsv(state: State, entity: string): string {
         ["id", "data", "case_id", "procedimento", "categoria", "valor_tabelado", "valor_faturado", "pagador", "seguradora", "consultas_previstas", "custo_laboratorio", "outros_custos", "concluido", "observacao", "consultas"],
         state.procedures.map((p) => [p.id, ptDate(p.date), p.caseCode, p.procedureType, p.category, eur(p.listPriceCents), eur(p.billedCents), p.payerType, p.payerName, p.plannedVisits, eur(p.labCostCents), eur(p.otherCostCents), p.completed ? "sim" : "não", p.note, p.sessions.map((s) => `${ptDate(s.date)} ${formatTime(s.startMinute)}-${formatTime(s.endMinute)}`).join("|")]),
       );
+    case "exames":
+      return csv(["id", "data", "exame", "case_id", "valor", "observacao"], state.exams.map((x) => [x.id, ptDate(x.date), x.examType, x.caseCode, eur(x.billedCents), x.note]));
     case "faltas":
       return csv(["id", "data", "hora", "duracao_min", "procedimento_previsto", "valor_estimado", "pagador", "tipo", "slot_recuperado", "receita_recuperada"], state.absences.map((a) => [a.id, ptDate(a.date), formatTime(a.startMinute), a.durationMinutes, a.plannedProcedure, eur(a.estimatedValueCents), a.payerType, a.kind, a.slotRecovered ? "sim" : "não", eur(a.recoveredValueCents)]));
     default:
@@ -198,14 +209,15 @@ export function data(ctx: Ctx): View {
       ["procedimentos", "Procedimentos"],
       ["faltas", "Faltas"],
       ["planos", "Planos"],
+      ["exames", "Exames"],
     ].map(([k, l]) => html`<button class="btn" data-export="${k}">⤓ ${l}</button>`)}</div>`, { desc: "Formato do Excel português (;, dd/mm/aaaa). Compatível com a importação da versão local." })}
     ${section("Folha Google Sheets", html`<div class="card pad"><p class="muted">Os dados estão numa folha da sua conta Google. Pode abri-la para consultar, filtrar ou descarregar (Ficheiro › Transferir › CSV). Não altere os cabeçalhos.</p><a class="btn" href="${state.raw.spreadsheetUrl}" target="_blank" rel="noopener">Abrir a folha ↗</a></div>`)}
     ${section("Demonstração", html`<div class="card pad">
       <p class="muted">Carrega dados sintéticos (setembro de 2026: €8.619 em 130,5 h). <strong>Substitui</strong> os registos atuais; as definições mantêm-se.</p>
       <div class="chips"><button class="btn" data-op="loadDemo" data-confirm="Substituir todos os registos pelos dados de demonstração?">Carregar demonstração</button>
-      <button class="btn danger" data-op="clearRecords" data-confirm="Apagar TODOS os registos (dias, procedimentos, faltas, planos)? As definições mantêm-se.">Apagar todos os registos</button></div>
+      <button class="btn danger" data-op="clearRecords" data-confirm="Apagar TODOS os registos (dias, procedimentos, faltas, planos, exames)? As definições mantêm-se.">Apagar todos os registos</button></div>
     </div>`)}
-    <p class="muted small">${state.procedures.length} procedimentos · ${state.sessions.length} consultas · ${state.days.length} dias · ${state.absences.length} faltas · ${state.plans.length} planos.</p>`;
+    <p class="muted small">${state.procedures.length} procedimentos · ${state.sessions.length} consultas · ${state.days.length} dias · ${state.absences.length} faltas · ${state.plans.length} planos · ${state.exams.length} exames.</p>`;
   const mount = (root: HTMLElement) =>
     root.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((b) =>
       b.addEventListener("click", () => {
@@ -226,12 +238,13 @@ export function more(): View {
     ["/procedimentos", "Procedimentos", "Lista, €/h e consultas de cada ato"],
     ["/dias", "Dias clínicos", "Horas disponíveis por dia"],
     ["/faltas", "Faltas", "Horas e receita perdidas"],
+    ["/exames", "Exames", "Ortopantomografia, CBCT… e honorários"],
     ["/rentabilidade", "Rentabilidade", "Matriz, top 5, casos complexos"],
     ["/seguros", "Particular vs seguros", "Impacto das convenções"],
     ["/simulador", "What if?", "Simulador e cenários"],
     ["/tendencias", "Tendências", "12 meses e média móvel"],
     ["/relatorio", "Relatório mensal", "Resumo e 3 ações"],
-    ["/definicoes", "Definições", "Perfil, horário, objetivos, templates"],
+    ["/definicoes", "Definições", "Perfil, horário, objetivos, templates, exames"],
     ["/dados", "Dados", "Exportar CSV e demonstração"],
   ];
   return {
