@@ -292,6 +292,23 @@ export const templateSchema = z.object({
 });
 export type TemplateInput = z.infer<typeof templateSchema>;
 
+/** Exame complementar (ortopantomografia, CBCT…): tipo, data e valor; Case ID opcional. */
+export const examSchema = z.object({
+  date: civilDate,
+  examType: z.string().trim().min(1, "Indique o exame.").max(80, "Exame: máximo 80 caracteres."),
+  caseCode,
+  billed: money("Valor do exame").refine((v) => v > 0, "Valor do exame: tem de ser maior que zero."),
+  note: safeText("Observação"),
+});
+export type ExamInput = z.infer<typeof examSchema>;
+
+/** Tipo de exame nas Definições, com o valor habitual (vazio = sem valor predefinido). */
+export const examTypeSchema = z.object({
+  name: z.string().trim().min(1, "Indique o nome do exame.").max(80, "Nome: máximo 80 caracteres."),
+  price: money("Valor habitual", { optional: true }),
+});
+export type ExamTypeInput = z.infer<typeof examTypeSchema>;
+
 /** Converte FormData num objeto simples de strings (o que os esquemas esperam). */
 export function formDataToObject(formData: FormData): Record<string, string> {
   const out: Record<string, string> = {};

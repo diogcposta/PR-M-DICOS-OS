@@ -271,6 +271,7 @@ export function register(ctx: Ctx): View {
       ${procedureFields(state, draft, "create")}
       <div class="form-actions"><button type="submit" class="btn primary">Gravar e novo</button><span class="muted small">⌘/Ctrl + Enter</span></div>
     </form>
+    <p class="muted small">Exames (ortopantomografia, CBCT…)? ${link("/exames", "Registar exame")} — contam à parte dos procedimentos.</p>
     <p class="muted small">Privacidade: não registe nomes, números de utente, telefones ou dados clínicos identificáveis.</p>`;
   return {
     title: "Registar",

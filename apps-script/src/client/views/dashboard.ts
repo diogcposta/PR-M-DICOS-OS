@@ -1,9 +1,10 @@
 import { relativeChange } from "@/modules/kpis/domain/ratio";
+import { examTotals } from "@/modules/production/domain/exams";
 import { EMPTY, euros, eurosPerHour, formatNumber, hours, integer, percent } from "@/modules/production/domain/format";
 import type { Funnel } from "@/modules/production/domain/plans";
 import type { Insight } from "@/modules/production/domain/insights";
 import type { ScoreResult } from "@/modules/production/domain/score";
-import { formatMonthLong, formatMonthShort } from "@/modules/production/domain/time";
+import { addMonths, formatMonthLong, formatMonthShort, monthRange } from "@/modules/production/domain/time";
 import { dashboardView } from "@/modules/production/domain/views";
 
 import { stackedBars } from "../charts";
@@ -64,10 +65,18 @@ export function dashboard(ctx: Ctx): View {
   const monthLabel = formatMonthLong(d.month);
   const hasData = c.procedureCount > 0 || c.workedDays > 0;
   const fee = state.profile.feeBps;
+  const monthExams = (m: string) => {
+    const r = monthRange(m);
+    return examTotals(state.exams, r.from, r.to, fee);
+  };
+  const ex = monthExams(d.month);
+  const exPrev = monthExams(addMonths(d.month, -1));
 
   const cards: StatOptions[] = [
     { label: "Produção do mês", value: euros(c.productionCents, { round: true }), ...delta(c.productionCents, p?.productionCents), big: true, id: "card-production", hint: "Soma do valor faturado dos procedimentos com data no mês." },
     { label: `Honorários (${percent(fee / 10_000, 0)})`, value: euros(c.feeCents), ...delta(c.feeCents, p?.feeCents), big: true, id: "card-fees", hint: "Produção × percentagem médica." },
+    { label: "Exames", value: euros(ex.feeCents), ...delta(ex.feeCents, exPrev.count ? exPrev.feeCents : null), sub: `${ex.count} ${ex.count === 1 ? "exame" : "exames"} · ${euros(ex.billedCents, { round: true })}`, id: "card-exams", hint: `Honorários dos exames (${percent(fee / 10_000, 0)} do valor). Não entram na produção nem no €/hora.` },
+    { label: "Total a receber", value: euros(c.feeCents + ex.feeCents), sub: "honorários dos atos + exames", id: "card-total-fees" },
     { label: "Horas clínicas", value: hours(c.clinicalMinutes), sub: `${c.workedDays} dias${c.plannedDays ? ` · +${c.plannedDays} previstos` : ""}`, id: "card-hours", hint: "Σ (fim − início − pausa) dos dias realizados." },
     { label: "Produção por hora", value: eurosPerHour(c.centsPerHour), ...delta(c.centsPerHour, p?.centsPerHour), id: "card-cph", hint: "Produção ÷ horas clínicas." },
     { label: "Produção por dia", value: euros(c.productionPerDayCents === null ? null : Math.round(c.productionPerDayCents), { round: true }), ...delta(c.productionPerDayCents, p?.productionPerDayCents) },

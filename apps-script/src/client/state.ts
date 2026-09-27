@@ -4,6 +4,7 @@
  * da app Next (`domain/views.ts`) — o servidor só lê, valida e grava.
  */
 import type { AppData } from "../server/api";
+import type { ExamRecord } from "@/modules/production/domain/exams";
 import type { GoalInput } from "@/modules/production/domain/goals";
 import type { ProcedureRecord, SessionRecord } from "@/modules/production/domain/metrics";
 import type { AbsenceRecord, ClinicalDayRecord, PlanRecord } from "@/modules/production/domain/monthly";
@@ -48,6 +49,18 @@ export interface PlanFull extends PlanRecord {
   readonly note: string | null;
 }
 
+export interface Exam extends ExamRecord {
+  readonly note: string | null;
+  readonly createdAt: string;
+}
+
+export interface ExamType {
+  readonly id: string;
+  readonly name: string;
+  /** 0 = sem valor predefinido. */
+  readonly priceCents: number;
+}
+
 export interface State {
   readonly raw: AppData;
   readonly today: string;
@@ -61,6 +74,9 @@ export interface State {
   readonly sessions: SessionRecord[];
   readonly absences: AbsenceRecord[];
   readonly plans: PlanFull[];
+  /** Exames: à parte da produção clínica e do €/hora (D-059). */
+  readonly exams: Exam[];
+  readonly examTypes: ExamType[];
   readonly records: ProductionRecords;
 }
 
@@ -165,6 +181,11 @@ export function buildState(data: AppData): State {
     sessions,
     absences,
     plans,
+    // `?? []`: dados de uma versão anterior do servidor, ainda sem exames.
+    exams: (data.exams ?? [])
+      .map((x) => ({ id: s(x.id), date: s(x.date), examType: s(x.examType), caseCode: ns(x.caseCode), billedCents: n(x.billedCents), note: ns(x.note), createdAt: s(x.createdAt) }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)),
+    examTypes: (data.examTypes ?? []).map((t) => ({ id: s(t.id), name: s(t.name), priceCents: n(t.priceCents) })),
     records: { days, procedures, sessions, absences, plans },
   };
 }

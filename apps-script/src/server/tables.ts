@@ -147,6 +147,22 @@ export const TABLES = {
       c("note", "observacao", "text", true),
     ],
   },
+  exams: {
+    name: "Exames",
+    columns: [
+      c("id", "id", "text"),
+      c("date", "data", "date"),
+      c("examType", "exame", "text"),
+      c("caseCode", "case_id", "text", true),
+      c("billedCents", "valor_cent", "int"),
+      c("note", "observacao", "text", true),
+      c("createdAt", "criado_em", "text"),
+    ],
+  },
+  examTypes: {
+    name: "TiposExame",
+    columns: [c("id", "id", "text"), c("name", "nome", "text"), c("priceCents", "preco_cent", "int")],
+  },
 } as const satisfies Record<string, TableDef>;
 
 export type TableKey = keyof typeof TABLES;

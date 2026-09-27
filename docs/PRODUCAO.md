@@ -31,6 +31,18 @@ Todas as fórmulas vivem em `src/modules/production/domain/` e têm testes em
 
 Exemplo (dados de demonstração): €8.619 ÷ 130,5 h = **66,05 €/h**; honorários €8.619 × 50% = **€4.309,50**.
 
+## Exames (versão Apps Script)
+
+Ortopantomografias, CBCT e outros exames dos pacientes do médico, feitos na clínica (D-059).
+
+| Indicador | Fórmula |
+|---|---|
+| Honorários dos exames | Σ (valor do exame × percentagem), um arredondamento ao cêntimo por exame; a base NET não se aplica (sem custos diretos) |
+| Total a receber | Honorários dos atos + honorários dos exames do mês |
+
+Os exames **não** entram na produção do mês, no €/hora, nos atos nem nos objetivos: não usam tempo de cadeira do médico.
+Exemplo: CBCT €80 + ortopantomografia €30 a 50% = **€55**; com a demonstração, total a receber €4.309,50 + €55 = **€4.364,50**.
+
 ## Rentabilidade
 
 | Indicador | Fórmula |
