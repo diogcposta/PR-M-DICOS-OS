@@ -4,7 +4,8 @@
  * Depende só de um subconjunto mínimo da API do SpreadsheetApp (interfaces
  * abaixo), para poder ser testado em Node e pré-visualizado no browser com uma
  * folha simulada. Cada pedido lê cada separador no máximo uma vez (cache por
- * execução) e escreve em lote.
+ * execução) — todos numa só chamada quando a folha tem `readTables` — e
+ * escreve em lote.
  */
 import { formatTime, isValidTime, parseTime } from "@/modules/production/domain/time";
 
@@ -27,6 +28,11 @@ export interface SheetLike {
 export interface SpreadsheetLike {
   getSheetByName(name: string): SheetLike | null;
   insertSheet(name: string): SheetLike;
+  /**
+   * Opcional: lê vários separadores inteiros numa só chamada (no Google, o
+   * serviço avançado Sheets). Lança um erro se faltar algum separador.
+   */
+  readTables?(names: readonly string[]): unknown[][][];
 }
 
 const TEXT_FORMAT = "@";
@@ -55,7 +61,10 @@ export function decodeCell(value: unknown, column: Column): string | number | bo
       if (value instanceof Date) return value.getHours() * 60 + value.getMinutes();
       if (typeof value === "number") return Math.round(value < 1 ? value * 24 * 60 : value);
       const text = String(value).trim();
-      return isValidTime(text) ? parseTime(text) : Number(text) || 0;
+      if (isValidTime(text)) return parseTime(text);
+      // Célula de hora lida como texto formatado ("9:30:00").
+      const hms = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(text);
+      return hms ? Number(hms[1]) * 60 + Number(hms[2]) : Number(text) || 0;
     }
     case "int":
       if (empty) return column.nullable ? null : 0;
@@ -117,18 +126,39 @@ export class SheetDb {
     return sheet;
   }
 
+  /**
+   * Lê todas as tabelas numa só chamada, se a folha o permitir (`readTables`).
+   * Devolve `false` se não for possível (sem leitura em lote ou separador em
+   * falta); nesse caso cada tabela é lida à parte quando for precisa.
+   */
+  preload(): boolean {
+    const keys = Object.keys(TABLES) as TableKey[];
+    if (keys.every((key) => this.cache.has(key))) return true;
+    if (!this.spreadsheet.readTables) return false;
+    let tables: unknown[][][];
+    try {
+      tables = this.spreadsheet.readTables(keys.map((key) => TABLES[key].name));
+    } catch {
+      return false;
+    }
+    keys.forEach((key, i) => this.cache.set(key, this.parse(key, tables[i] ?? [])));
+    return true;
+  }
+
   read(key: TableKey): Row[] {
     const cached = this.cache.get(key);
     if (cached) return cached;
-    const def = TABLES[key];
     const sheet = this.sheet(key);
     const last = sheet.getLastRow();
-    if (last < 1) {
-      this.cache.set(key, []);
-      return [];
-    }
-    const width = def.columns.length;
-    const values = sheet.getRange(1, 1, last, width).getValues();
+    const values = last < 1 ? [] : sheet.getRange(1, 1, last, TABLES[key].columns.length).getValues();
+    const rows = this.parse(key, values);
+    this.cache.set(key, rows);
+    return rows;
+  }
+
+  private parse(key: TableKey, values: unknown[][]): Row[] {
+    if (values.length === 0) return [];
+    const def = TABLES[key];
     const headers = (values[0] ?? []).map((h) => String(h).trim());
     const index = def.columns.map((col) => headers.indexOf(col.header));
     const missing = def.columns.filter((_, i) => index[i] === -1).map((col) => col.header);
@@ -145,7 +175,6 @@ export class SheetDb {
       });
       rows.push(row);
     }
-    this.cache.set(key, rows);
     return rows;
   }
 

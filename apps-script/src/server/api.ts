@@ -99,8 +99,13 @@ export class Api {
     return profile;
   }
 
+  /** Carrega todas as tabelas numa só leitura; sem isso, garante que os separadores existem. */
+  private load(): void {
+    if (!this.db.preload()) this.db.ensureTables();
+  }
+
   getData(): AppData {
-    this.db.ensureTables();
+    this.load();
     const profile = this.ensureProfile();
     const bySort = (a: Row, b: Row) => Number(a.sortOrder) - Number(b.sortOrder);
     return {
@@ -139,10 +144,12 @@ export class Api {
   private mutate(fn: () => void, message: string): ApiResult {
     try {
       this.env.withLock(() => {
-        this.db.ensureTables();
+        // Lido dentro do bloqueio: as validações veem os dados mais recentes.
+        this.load();
         this.ensureProfile();
         fn();
       });
+      // As escritas atualizam a cache da execução: não é preciso reler a folha.
       return { ok: true, message, errors: {}, data: this.getData() };
     } catch (error) {
       if (error instanceof RuleError) return { ok: false, message: error.message, errors: { [error.field]: error.message } };

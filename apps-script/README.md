@@ -59,7 +59,8 @@ Guarde (⌘/Ctrl + S).
 
 ## Atualizar para uma versão nova
 
-1. Substitua o conteúdo de `Servidor.gs` e `Index` pelos novos `dist/Servidor.gs` e `dist/Index.html`.
+1. Substitua o conteúdo de `Servidor.gs` e `Index` pelos novos `dist/Servidor.gs` e `dist/Index.html`
+   (e de `appsscript.json`, se tiver mudado).
 2. **Implementar › Gerir implementações** › ✏ › *Versão*: **Nova versão** › **Implementar**.
    O URL mantém-se.
 
@@ -84,6 +85,8 @@ A barra inferior tem **Início** (dashboard), **Registar** (procedimento em < 20
 definições, dados). Tudo o resto funciona como na versão local — ver o [README principal](../README.md).
 
 - Cada gravação demora 1–2 s (é o tempo do Google Apps Script). A primeira abertura do dia pode demorar mais.
+- O `appsscript.json` ativa o serviço avançado **Sheets** (lê todos os separadores numa só chamada; não pede
+  permissões novas). Sem ele a app funciona na mesma, mas abre mais devagar.
 - É preciso ligação à internet.
 - A folha pode ser aberta em **Mais › Dados › Abrir a folha**. Pode consultar e filtrar à vontade, mas
   **não altere os cabeçalhos** (primeira linha) nem as colunas `id`.

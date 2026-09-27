@@ -62,6 +62,7 @@
 | D-055 | Folha com cabeçalhos em português lidos pelo nome; datas e horas como texto (`aaaa-mm-dd`, `HH:mm`, formato `@`) para o Sheets não as converter em datas; booleanos como "sim"/"não"; dinheiro em cêntimos. A leitura tolera datas convertidas e `dd/mm/aaaa` editados à mão | aceite |
 | D-056 | Build com esbuild para 4 ficheiros copiáveis (`Codigo.gs`, `Servidor.gs`, `Index.html`, `appsscript.json`) versionados em `apps-script/dist/`: o médico instala sem Node.js; um teste falha se `dist/` estiver desatualizado. Traduções do Zod excluídas do bundle (mensagens são próprias) | aceite |
 | D-057 | Cliente sem framework (HTML escapado + SVG próprio): página única de ~120 KB, rápida no iPhone; campos a 16 px (sem zoom do Safari), barra inferior com áreas seguras, tema claro/escuro do sistema. Pré-visualização local com folha simulada para testes E2E | aceite |
+| D-058 | Velocidade no Apps Script (medido: `getData` 3,6–5,5 s com ~50 chamadas ao SpreadsheetApp). Leitura de todos os separadores numa só chamada com o serviço avançado **Sheets** (`Values.batchGet`, mesmo âmbito `spreadsheets`; sem o serviço, volta à leitura por separador); a folha só é aberta com o SpreadsheetApp para escrever; nas escritas, a resposta usa a cache da execução em vez de reler; o `doGet` envia os dados dentro da página (um só pedido ao abrir). Sem cache entre execuções: edições feitas à mão na folha aparecem logo | aceite |
 
 ## Dúvidas por resolver
 

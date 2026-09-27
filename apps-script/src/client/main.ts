@@ -4,7 +4,7 @@
  * Router por hash (`#/planos?mes=2026-09`), navegação inferior no iPhone,
  * ações genéricas por atributos `data-op` e cálculos locais sobre o estado.
  */
-import type { AppData, Operation } from "../server/api";
+import type { ApiResult, AppData, Operation } from "../server/api";
 
 import { buildState, type State } from "./state";
 import { call } from "./transport";
@@ -166,7 +166,9 @@ window.addEventListener("hashchange", () => {
 
 async function start(): Promise<void> {
   registerHooks(applyData, toast);
-  const result = await call("getData");
+  // Dados enviados já dentro da página pelo doGet; senão, pedem-se ao servidor.
+  const boot = (window as { __BOOT__?: ApiResult }).__BOOT__;
+  const result = boot?.ok && boot.data ? boot : await call("getData");
   if (!result.ok || !result.data) {
     main().innerHTML = `<div class="card pad"><h1>Não foi possível carregar os dados</h1><p>${esc(result.message)}</p><p class="muted small">Se é a primeira utilização, execute a função <code>configurar</code> no editor do Apps Script.</p><button class="btn primary" onclick="location.reload()">Tentar de novo</button></div>`;
     return;
