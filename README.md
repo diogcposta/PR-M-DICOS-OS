@@ -1,271 +1,191 @@
-# PR Médicos OS
+# PR Médicos OS — Clinical Production Dashboard
 
-Gestão analítica para clínicas. Recebe exportações manuais em Excel/CSV, preserva o histórico, calcula KPIs com definições explícitas e destaca as áreas onde a gestão deve intervir. Não substitui o Newsoft nem copia o seu dashboard.
+Aplicação web local para um médico dentista perceber e melhorar a sua produção clínica:
+quanto produz por hora e por dia, quanto recebe, onde perde capacidade (faltas, horas vazias),
+que procedimentos e convenções rendem mais ou menos por hora, que planos de tratamento não
+avançaram e que mudanças **operacionais** têm mais impacto — sem aumentar horas e sem
+incentivar sobretratamento.
 
-Antes de mexer no código, ler `CLAUDE.md`, `docs/MVP.md` e `docs/ARCHITECTURE.md`.
+- Sem dados identificáveis de pacientes: só **Case IDs** (`DC-2026-001`).
+- Sem serviços pagos nem IA externa: tudo corre no seu computador, com uma base SQLite local.
+- Indicadores operacionais/económicos — **não medem qualidade clínica**.
 
-## Estado atual — Fase 4A concluída (demonstração com dados sintéticos)
+> **No iPhone, sem computador ligado:** existe uma versão **Google Apps Script** que corre na sua conta
+> Google, guarda os dados numa folha Google Sheets e abre no Safari do iPhone. Instalação passo a passo
+> em [`apps-script/README.md`](apps-script/README.md) — basta copiar 4 ficheiros de `apps-script/dist/`.
 
-A Fase 4 (adaptação aos ficheiros reais do Newsoft) está **pendente**: precisa de exportações
-anonimizadas que ainda não recebemos. Enquanto isso, a Fase 4A reforça o MVP inteiramente com
-dados sintéticos, para ficar demonstrável e robusto sem inventar formato Newsoft nenhum:
+> O repositório contém também o módulo **Clínica** (importações Newsoft, PostgreSQL), documentado
+> em [`docs/CLINICA.md`](docs/CLINICA.md). O dashboard de produção não depende dele.
 
-- perfil de mapeamento chamado explicitamente **`SYNTHETIC_AGENDA_V1`** — nunca "Newsoft" — e
-  identificadores neutros (`CLINIC-001`, `DOCTOR-001`, `PATIENT-001`), sem nomes nem contactos;
-- gerador **determinístico** de dados sintéticos (`scripts/generate-synthetic-data.ts`): a mesma
-  semente produz sempre o mesmo ficheiro, byte a byte — cobre 2 clínicas, 4 médicos, 8 meses,
-  consultas realizadas/canceladas/faltas/futuras, um mês sem dados, datas nas fronteiras do mês,
-  linhas inválidas e IDs duplicados, em `.csv` e `.xlsx`;
-- comando repetível `npm run demo:seed`, que regenera as fixtures e importa-as pelo mesmo
-  caminho de código do ecrã (idempotente: a segunda execução é recusada como duplicada);
-- resumo da importação em três vias — aceites / rejeitadas / ignoradas — e relatório de erros
-  **descarregável em CSV**, pronto para o Excel português;
-- **proveniência completa** em cada KPI: versão da definição, período e filtros aplicados,
-  numerador e denominador, lotes de origem e data da última atualização;
-- página **Qualidade dos dados**, com lotes importados, motivos de rejeição, duplicados, campos
-  em falta e a cobertura temporal real (incluindo buracos no meio da série);
-- estados de carregamento e de erro no dashboard, e uma marca visual persistente sempre que os
-  dados apresentados forem sintéticos;
-- testes de **isolamento entre organizações**, com identificadores externos propositadamente
-  repetidos entre duas organizações de teste.
+---
 
-As fases anteriores continuam de pé e testadas:
+## Duas formas de usar
 
-- **Fase 3** — seis KPIs de agenda (consultas agendadas, realizadas, faltas e as três taxas),
-  filtros por período/clínica/médico no URL, comparação com o período anterior, série mensal por
-  mês civil de `Europe/Lisbon`, "Como é calculado?" em cada cartão, divisão por zero em "sem
-  dados" nunca 0%;
-- **Fase 2** — upload de `.csv`/`.xlsx` com limites e rejeição antes do parsing, SHA-256 com
-  bloqueio de reimportação, mapeamento de colunas editável, validação de datas portuguesas,
-  confirmação transacional com `AppointmentFact` idempotente;
-- **Fase 1** — Next.js (App Router) com TypeScript estrito, PostgreSQL com Prisma, contrato
-  `AIAnalysisProvider`/`DisabledAIProvider` sem nenhum SDK de IA, validação tipada de ambiente.
+| | Versão Google Apps Script | Versão local (Next.js) |
+|---|---|---|
+| Onde corre | Conta Google (grátis) | O seu computador |
+| iPhone | Sim, em qualquer lado (Safari, ícone no ecrã principal) | Só na mesma rede Wi-Fi, com o computador ligado |
+| Dados | Folha Google Sheets sua | Ficheiro SQLite local |
+| Instalação | Copiar 4 ficheiros ([guia](apps-script/README.md)) | `npm install` + 2 comandos |
+| Cálculos | Os mesmos (código partilhado) | Os mesmos |
 
-**Os KPIs financeiros e de pacientes continuam bloqueados**: não há definição de negócio aprovada
-para "ativo", "perdido" ou "reativado", nem amostras validadas de produção e faturação. Calculá-los
-seria inventar a definição.
+## Começar em 3 passos (versão local)
 
-As fórmulas de agenda estão fixadas e testadas, mas **ainda não foram validadas com o responsável
-de negócio** — o ecrã marca cada uma como "definição provisória" e diz o que falta decidir. O
-denominador das taxas está registado em D-019.
-
-O perfil de mapeamento é **sintético** (`SYNTHETIC_AGENDA_V1`). Os cabeçalhos (`id_consulta`,
-`data_hora`, …) foram inventados para as fixtures deste repositório e não representam nenhuma
-exportação real do Newsoft. Ver "Substituir o perfil sintético por um real", mais abaixo.
-
-## Requisitos
-
-- Node.js 20 ou superior (testado com 26.7);
-- PostgreSQL 18 — via Docker ou via Homebrew (ver abaixo).
-
-## Instalação
+Requisitos: **Node.js 20.19+ ou 22+** (macOS: `brew install node`). Nada mais.
 
 ```bash
 npm install
+npm run producao:setup     # cria a base local e carrega dados de demonstração
+npm run dev                # abre em http://localhost:3000
 ```
 
-## Base de dados
+Abra **http://localhost:3000/producao** (ou apenas http://localhost:3000). No iPad/iPhone na mesma
+rede Wi-Fi, use o endereço "Network" que o `npm run dev` mostra (ex.: `http://192.168.1.20:3000`).
 
-### Opção A — Docker (recomendada quando disponível)
+Os dados de demonstração são sintéticos: setembro de 2026 com **€8.619** de produção, **€4.309,50**
+de honorários, **130,5 h** clínicas (≈ **66,05 €/h**) e dois dias clínicos ainda previstos, mais
+abril–agosto para as tendências.
 
-```bash
-npm run db:up
-```
+### Começar com os seus dados
 
-### Opção B — Homebrew (macOS sem Docker)
+1. **Definições** → confirme nome, percentagem (50%), horário, objetivos e regras de follow-up.
+2. Apague a demonstração: `npm run producao:seed` recarrega-a; para uma base vazia apague
+   `data/producao.db` e corra `npm run producao:migrate` (o perfil é recriado com os valores iniciais).
+3. Todos os dias: **Dias clínicos** → registar o dia; **+ Registar** → procedimentos.
 
-```bash
-brew install postgresql@18
-brew services start postgresql@18
-```
+---
 
-Criar o utilizador e a base de dados (uma única vez):
+## Utilização diária
 
-```bash
-/usr/local/opt/postgresql@18/bin/psql -d postgres -c "CREATE ROLE pr_medicos WITH LOGIN PASSWORD 'pr_medicos_dev' CREATEDB;"
-/usr/local/opt/postgresql@18/bin/createdb -O pr_medicos pr_medicos_os
-```
+| Tarefa | Onde | Dica |
+|---|---|---|
+| Registar o dia | Dias clínicos | O horário habitual vem pré-preenchido. *Previsto* = só conta na projeção. |
+| Registar um procedimento (< 20 s) | **+ Registar** (atalho **N**) | Escreva o tipo: preço, duração, pagador e laboratório habituais preenchem-se. ★ favoritos, "Copiar último", **⌘/Ctrl + Enter** grava e prepara o seguinte a começar onde este acabou. |
+| Tratamento em várias consultas | Página do procedimento → *Adicionar consulta* | A receita é uma só; o tempo soma-se. Use o mesmo Case ID para vários procedimentos do mesmo caso. |
+| Faltas | Faltas | Indique se o slot foi recuperado e a receita da lista de espera. |
+| Planos | Planos | Lista automática de follow-up; "Contactado hoje" reinicia a contagem. |
+| Ver o dia | Agenda (atalho **A**) | Slots de 30/45/60/90/120 min sobre o horário, com consultas e faltas. |
+| Decidir | Dashboard (atalho **D**), Rentabilidade, Seguros, Tendências, What if?, Relatório | |
 
-## Configuração
+## Funcionalidades
 
-```bash
-cp .env.example .env
-```
+- **Dashboard**: produção, honorários, horas, €/h, €/dia, atos, agendamentos, faltas, taxa de faltas,
+  receita perdida, planos apresentados/aceites, taxa de aceitação, pendentes; variação face ao mês
+  anterior; projeção de fim de mês.
+- **Produção atual vs objetivos** (85/100/125/150 €/h editáveis): produção e honorários projetados com
+  as mesmas horas e distância ao próximo objetivo (ex.: 66 → 85 €/h = +19 €/h, +28,8%).
+- **Rentabilidade**: €/h, produção líquida, honorários e honorários/h por procedimento; matriz
+  ordenável (maior/menor €/h, faturação, casos); top 5 mais e menos produtivos; €/h por categoria;
+  procedimentos abaixo do objetivo; **casos multi-procedimento** com deteção de "valor elevado,
+  €/h baixo" (ex.: retratamento + coroa = €800 em 7 h ≈ €114/h).
+- **Particular vs seguros/convenções**: por procedimento e por seguradora, comparando a mesma mistura
+  de procedimentos; desconto face à tabela e impacto mensal.
+- **Faltas**: horas perdidas, receita potencial/recuperada/líquida perdida, % da agenda perdida,
+  gráfico produção real vs potencial.
+- **Planos**: funil diagnóstico → apresentado → aceite → iniciado → concluído (valor e casos, maior
+  perda destacada), follow-up automático (> €500 sem consulta, > €1.500 prioritário, 7/30 dias sem
+  resposta), tratamentos que não avançaram. Sem mensagens a pacientes.
+- **Agenda e eficiência**: horas disponíveis, marcadas, trabalhadas, perdidas, vazias; ocupação
+  teórica vs real.
+- **What if?** e **cenários** (Atual, Meta 12 meses, Meta longo prazo): horas, €/h, %, faltas,
+  aceitação e valor médio dos planos → produção e honorários mensais e anuais.
+- **Tendências** (12 meses): produção, honorários, €/h, horas, produção/dia, faltas, receita perdida,
+  planos, aceitação, valor médio por caso — mês vs anterior e média móvel de 3 meses.
+- **Insights automáticos** por regras (sem IA) e **Clinical Efficiency Score** 0–100 (operacional).
+- **Relatório mensal** com as 3 ações de maior impacto; imprimir/guardar PDF pelo browser; Markdown.
+- **Exportar** tudo em CSV (Excel PT: `;`, BOM, `dd/mm/aaaa`); **importar** CSV com pré-visualização,
+  erros por linha, SHA-256 contra reimportação e gravação transacional.
+- Modo **claro/escuro** (botão no cabeçalho; por omissão segue o sistema); responsivo MacBook/iPad/iPhone.
 
-O `.env` de desenvolvimento aponta para a base local e usa apenas dados sintéticos. Nunca colocar segredos reais no `.env.example`.
+## Comandos
 
-## Migrar e semear
+| Comando | O que faz |
+|---|---|
+| `npm run producao:setup` | Gera os clientes Prisma, aplica migrações SQLite e carrega a demonstração se a base estiver vazia (idempotente) |
+| `npm run dev` | Servidor de desenvolvimento em http://localhost:3000 |
+| `npm run producao:seed` | Recarrega os dados de demonstração (apaga os registos; mantém definições) |
+| `npm run producao:migrate` | Aplica migrações pendentes à base local |
+| `npm run producao:studio` | Prisma Studio sobre a base local |
+| `npm run test:producao` | Testes unitários + testes da aplicação contra SQLite temporário |
+| `npm run test:e2e:producao` | Playwright: fluxo crítico (desktop) e responsividade (iPhone). Em ambientes sem browsers descarregados: `PLAYWRIGHT_CHROMIUM_PATH=/caminho/chromium` |
+| `npm run lint` / `npm run typecheck` | ESLint / TypeScript estrito |
+| `npm run gas:build` / `npm run gas:preview` | Versão Apps Script: gerar `apps-script/dist/` / pré-visualizar em http://localhost:3400 |
+| `npm run test:e2e:gas` | Playwright da versão Apps Script (iPhone e desktop) |
+| `DATABASE_URL=… npm run build && npm start` | Build de produção (o módulo Clínica exige `DATABASE_URL` no build; qualquer URL PostgreSQL serve se não o usar) |
 
-```bash
-npm run db:generate
-npm run db:migrate
-npm run db:seed
-```
+Testes do módulo Clínica (PostgreSQL): ver [`docs/CLINICA.md`](docs/CLINICA.md#qualidade).
 
-O seed cria uma organização, duas clínicas e dois médicos fictícios. Não cria factos: o dashboard tem de mostrar estados vazios verdadeiros.
+## Arquitetura
 
-## Limpar a base de desenvolvimento
-
-Depois de experimentar importações, para voltar ao estado inicial:
-
-```bash
-npm run db:reset
-```
-
-Isto apaga **todos** os dados da base indicada em `DATABASE_URL`, reaplica as migrações e volta a semear. Nunca correr contra uma base de produção.
-
-O `db:reset` encadeia dois passos de propósito. No Prisma 7 o seed deixou de ser executado automaticamente pelas migrações: o `prisma migrate reset` aplica as migrações e para aí. Sozinho, deixaria a base completamente vazia — sem sequer uma organização, e as páginas mostrariam "Nenhuma organização configurada".
-
-Se for um agente de IA a correr o comando, o Prisma bloqueia-o e exige consentimento explícito do utilizador. É intencional, e o `--force` não substitui esse consentimento.
-
-## Arrancar
-
-```bash
-npm run dev
-```
-
-- <http://localhost:3000/> — Dashboard
-- <http://localhost:3000/imports> — Histórico de importações
-- <http://localhost:3000/qualidade> — Qualidade dos dados
-- <http://localhost:3000/kpis> — Catálogo de KPIs
-- <http://localhost:3000/api/health> — Saúde da aplicação
-
-## Gerar e importar dados de demonstração
-
-Forma mais rápida de deixar o MVP com dados de ponta a ponta:
-
-```bash
-npm run demo:seed
-```
-
-Isto regenera `tests/fixtures/demo-agenda.csv`/`.xlsx` a partir do gerador determinístico
-(`src/modules/imports/domain/synthetic-dataset.ts`, semente fixa) e importa-os pelo mesmo
-caminho de código do ecrã — validação, transação e registo de erros incluídos. É repetível: correr
-outra vez dá o mesmo resultado, e a segunda importação é recusada como duplicada (uma
-demonstração útil por si só). Para só regenerar as fixtures sem importar: `npm run demo:generate`.
-
-O conjunto gerado cobre de propósito os casos que costumam partir um importador: duas clínicas,
-quatro médicos, oito meses de histórico, consultas realizadas/canceladas/faltas/futuras, um mês
-inteiro sem dados, consultas exatamente nas fronteiras do mês, IDs duplicados e linhas inválidas
-(data inexistente, campos em falta, clínica/médico desconhecidos, estado sem mapeamento, duração
-não numérica). Depois de importar, ver `/qualidade` para o relatório completo do que entrou e do
-que ficou de fora.
-
-## Demonstrar o fluxo de importação manualmente
-
-1. `npm run dev` e abrir <http://localhost:3000/imports>;
-2. clicar em **Importar ficheiro**;
-3. escolher `tests/fixtures/agenda-valida.csv` — aparecem os cabeçalhos, o separador detetado, a amostra e o mapeamento sugerido;
-4. **Validar** → 6 linhas, 6 válidas, 0 inválidas;
-5. **Confirmar importação** → resumo em três vias (aceites/rejeitadas/ignoradas) e ligação para o detalhe do lote;
-6. repetir com o mesmo ficheiro → aviso de duplicado na pré-visualização e lote registado como `DUPLICATE`, sem gravar nada;
-7. repetir com `tests/fixtures/agenda-com-erros.csv` → 7 linhas inválidas com erro por linha e coluna; confirmar fica bloqueado até assinalar explicitamente "gravar apenas as linhas válidas"; depois de confirmar, descarregar o relatório de erros em CSV;
-8. `tests/fixtures/agenda-valida.xlsx` demonstra o mesmo com Excel e duas folhas.
-
-## Demonstrar o dashboard
-
-Depois de importar `tests/fixtures/agenda-dashboard.csv`:
-
-1. abrir <http://localhost:3000/?de=2025-01-01&ate=2025-01-31>;
-2. 5 consultas — 2 realizadas, 1 falta, 1 cancelada, 1 por realizar;
-3. taxa de realização 50,0 % (denominador 4, não 5: a consulta por realizar não conta);
-4. abrir "Como é calculado?" num cartão para ver fórmula, numerador, denominador e versão;
-5. filtrar por clínica e ver o denominador acompanhar o filtro;
-6. `?de=2025-01-10&ate=2025-01-10` — só uma consulta por realizar: as taxas mostram "sem dados", não 0 %;
-7. `?de=2024-01-01&ate=2024-01-31` — período vazio, sem indicadores inventados;
-8. abrir "Como é calculado?" e ver também os lotes de origem e a data da última atualização;
-9. abrir <http://localhost:3000/qualidade> para o relatório de qualidade dos dados.
-
-## Qualidade
-
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run test:e2e
-```
-
-Os testes estão em três níveis:
-
-- **unit** (`tests/unit`) — domínio e parsers, sem I/O e sem base de dados; inclui o gerador
-  sintético (determinismo e cobertura) e o relatório de erros em CSV;
-- **integration** (`tests/integration`) — deduplicação, política de linhas, rollback e
-  **isolamento entre organizações**, contra `TEST_DATABASE_URL`;
-- **e2e** (`tests/e2e`) — fluxo crítico de importação e do dashboard no browser, com Playwright.
-
-Os testes de integração e e2e usam uma base separada. Criar uma vez:
-
-```bash
-/usr/local/opt/postgresql@18/bin/createdb -O pr_medicos pr_medicos_os_test
-```
-
-O Playwright arranca o seu próprio servidor: parar o `npm run dev` antes de correr `npm run test:e2e`, porque o Next recusa dois servidores de desenvolvimento na mesma pasta.
-
-As fixtures são totalmente sintéticas — ver `tests/fixtures/README.md`.
-
-## Inspecionar a base de dados
-
-```bash
-npm run db:studio
-```
-
-## Estrutura
+Monólito modular Next.js (App Router, TypeScript estrito). A web só compõe; as regras vivem no domínio.
 
 ```text
-prisma/            esquema, migrações e seed sintético
-scripts/           gerador de dados sintéticos e comando de demonstração
-src/app/           páginas, layout e route handlers (sem regras de negócio)
-  qualidade/       lotes, rejeições, duplicados, campos em falta, cobertura temporal
-src/components/    UI acessível e reutilizável
-src/modules/
-  imports/         parsing, normalização, validação, commit transacional, relatório de erros,
-                   gerador sintético
-  kpis/            dinheiro, períodos, rácios, catálogo, cálculo e proveniência dos KPIs
-  ai/              contrato neutro de fornecedor + implementação desativada
-  organizations/   contexto de organização
-src/lib/
-  db/              cliente Prisma
-  env/             validação de ambiente
-  observability/   logging com allowlist de campos
-tests/unit/        domínio e parsers, sem I/O
-tests/integration/ deduplicação, políticas, rollback e isolamento entre organizações
-tests/e2e/         fluxo crítico de importação e do dashboard (Playwright)
-tests/fixtures/    ficheiros sintéticos CSV/XLSX
-docs/              MVP, arquitetura, contrato de importação, KPIs e decisões
-prompts/           os pedidos de cada fase
+src/modules/production/
+  domain/          cálculos puros e testados (sem Next, Prisma ou bibliotecas de ficheiros)
+    metrics.ts     procedimento, matriz, casos, particular vs seguros, convenções
+    monthly.ts     resumo do mês, faltas, eficiência da agenda, planos
+    plans.ts       follow-up e funil       goals.ts / simulator.ts / score.ts / trends.ts
+    insights.ts    insights e ações por regras      agenda.ts / time.ts / format.ts
+  application/     casos de uso: comandos (transações, sobreposições), consultas, Zod, CSV, relatório
+  infrastructure/  CSV (papaparse) e SHA-256
+  demo/            dados sintéticos determinísticos
+src/lib/db/production.ts     cliente Prisma SQLite
+src/app/producao/            páginas, server actions, rotas de exportação
+src/components/production/   UI (Tailwind), gráficos (Recharts), formulários
+prisma/production/           esquema e migrações
 ```
 
-## Princípios já decididos
+Stack: Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Prisma 7 + SQLite
+(`better-sqlite3`), Zod, Vitest, Playwright. Sem shadcn/ui: componentes próprios acessíveis com
+Tailwind, sem dependências Radix (D-047). Decisões em [`docs/DECISIONS.md`](docs/DECISIONS.md)
+(D-033 a D-051) e dúvidas em aberto na mesma página.
 
-- Sem integração com a API do Newsoft no MVP.
-- Importação manual de Excel/CSV, com pré-visualização, validação e relatório de erros.
-- PostgreSQL como fonte histórica de verdade.
-- KPIs determinísticos, testados e independentes de IA.
-- A IA é opcional e acede apenas a dados agregados e minimizados.
-- Arquitetura preparada para substituir OpenAI por outro fornecedor.
-- Valores monetários em cêntimos; instantes em UTC com contexto de negócio `Europe/Lisbon`.
-- Não usar dados reais de pacientes durante o desenvolvimento.
+### Base de dados
 
-## Substituir o perfil sintético por um real
+SQLite em `data/producao.db` (fora do git). Tabelas: `doctor_profiles`, `schedule_blocks`,
+`production_goals`, `scenarios`, `clinical_days`, `clinical_cases`, `procedures`,
+`procedure_sessions`, `procedure_templates`, `absence_events`, `treatment_plans`,
+`production_imports`. Todas as tabelas de negócio têm `doctorId`.
 
-Quando chegar uma exportação anonimizada do Newsoft (`prompts/04-real-newsoft-samples.md`):
+- Dinheiro: inteiros em **cêntimos**; percentagens em **pontos-base**.
+- Datas: data civil `yyyy-MM-dd` (Europe/Lisbon); horas: minutos desde a meia-noite.
+- Enums como texto validado por Zod → esquema portável.
 
-1. **não editar** `SYNTHETIC_AGENDA_V1`. Criar uma chave nova (ex.: `NEWSOFT_AGENDA_V1`) em
-   `src/modules/imports/domain/appointment-profile.ts`, com `isSynthetic: false` e o mapeamento
-   real de colunas — cabeçalhos, sinónimos e `statusLabels` a partir da amostra, nunca inventados;
-2. o contrato canónico de linha (`domain/contract.ts`) e o validador
-   (`domain/validate-appointments.ts`) não mudam: já são neutros em relação ao formato de origem;
-3. o esquema, o pipeline de commit, a deduplicação e os KPIs também não mudam — dependem do
-   contrato canónico, não do perfil;
-4. o ecrã deixa de mostrar "sintético" automaticamente, porque isso vem de
-   `importProfile.isSynthetic` gravado com cada lote — nenhuma alteração de UI necessária;
-5. rever com o responsável de negócio os denominadores de D-019/D-020 e os estados mapeados,
-   porque foram decididos sem uma amostra real;
-6. só depois disso um KPI pode passar a `definitionApproved: true`.
+**Migrar para PostgreSQL/Supabase**: em `prisma/production/schema.prisma` trocar `provider = "sqlite"`
+por `"postgresql"`, em `src/lib/db/production.ts` trocar `PrismaBetterSqlite3` por `PrismaPg`,
+gerar uma migração nova, exportar os CSV (Importar/Exportar) e importá-los na nova base.
 
-Continua bloqueado até lá: qualquer definição de "ativo", "perdido" ou "reativado", e os KPIs de
-produção, faturação e orçamentos, que exigem as suas próprias amostras.
+**Cópia de segurança**: copiar `data/producao.db`, ou exportar os 4 CSV.
 
-## Fase seguinte
+## Principais fórmulas
 
-`prompts/04-real-newsoft-samples.md` — mapear as exportações reais do Newsoft a partir de amostras anonimizadas, substituindo o perfil sintético. Continua **pendente**: precisa de amostras anonimizadas que ainda não recebemos.
+Detalhe completo em [`docs/PRODUCAO.md`](docs/PRODUCAO.md).
+
+- €/h (dashboard) = produção ÷ horas clínicas (dias realizados, sem pausas).
+- €/h de um procedimento = valor faturado ÷ horas de cadeira de **todas** as suas consultas.
+- Honorários = produção × % (base configurável); produção líquida = faturado − laboratório − outros custos.
+- Taxa de faltas = (faltas + cancelamentos tardios) ÷ (consultas realizadas + essas faltas).
+- Receita líquida perdida = valor estimado das faltas − receita recuperada pela lista de espera.
+- Ocupação teórica = (trabalhado + perdido) ÷ disponível; real = trabalhado ÷ disponível.
+- Aceitação = valor aceite ÷ valor apresentado.
+- Divisão por zero → "sem dados", nunca 0%.
+
+## Verificações feitas
+
+Testes automáticos cobrem: cálculos financeiros e honorários (arredondamento único), divisões por
+zero, consultas sobrepostas (recusadas; união no cálculo de ocupação), tratamentos com várias
+consultas e casos multi-procedimento, custos de laboratório e margem, faltas e receita recuperada,
+alteração da percentagem médica, follow-up e funil, simulador, score, insights (incluindo a regra de
+não prescrever tratamentos), importação/exportação com reprodução exata dos números, persistência
+dos dados entre ligações, e responsividade/ausência de erros em largura de iPhone.
+
+## Roadmap
+
+1. Validar com o médico as definições marcadas "por validar" (`docs/DECISIONS.md`).
+1. Importação CSV na versão Apps Script (migrar dados da versão local).
+2. Adaptador de importação Newsoft (quando houver exportações reais anonimizadas).
+3. PDF gerado no servidor para o relatório mensal (hoje: imprimir/guardar PDF no browser).
+4. Autenticação e migração para PostgreSQL/Supabase para acesso fora de casa.
+5. Duração real vs slot marcado (para medir derrapagens da agenda de 45 min).
+6. Metas por mês e alertas quando a projeção fica abaixo do objetivo.
+7. Opcional: análise por IA através de `AIAnalysisProvider` apenas com métricas agregadas.

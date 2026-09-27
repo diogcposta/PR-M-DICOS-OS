@@ -22,6 +22,15 @@ export default defineConfig({
         },
       },
       {
+        // Módulo "Produção clínica": aplicação contra SQLite temporário (sem servidor).
+        test: {
+          name: "production",
+          environment: "node",
+          include: ["tests/production/**/*.test.ts", "tests/apps-script/**/*.test.ts"],
+          testTimeout: 30_000,
+        },
+      },
+      {
         // Correm contra TEST_DATABASE_URL, numa base separada da de desenvolvimento.
         test: {
           name: "integration",
