@@ -86,7 +86,11 @@ definições, dados).
 
 **Exames** (ortopantomografia, CBCT…): em **Mais › Exames** escolha o tipo, a data e o valor (o valor habitual de
 cada tipo define-se em **Definições › Exames**). Recebe a mesma percentagem dos atos; os exames aparecem à parte no
-Início ("Exames" e "Total a receber") e não mexem na produção nem no €/hora. Tudo o resto funciona como na versão local — ver o [README principal](../README.md).
+Início ("Exames") e não mexem na produção nem no €/hora.
+
+**Fecho do mês**: no dia a dia regista o **valor pago pelo paciente**; os honorários são uma estimativa. Quando receber a
+folha de honorários, grave o total em **Mais › Fecho do mês** e o Início passa a mostrar "Recebido" e a diferença. Os
+meses antes de usar a app entram aqui como **histórico** (total recebido e, se tiver, valor pago e horas). Tudo o resto funciona como na versão local — ver o [README principal](../README.md).
 
 - Cada gravação demora 1–2 s (é o tempo do Google Apps Script). A primeira abertura do dia pode demorar mais.
 - O `appsscript.json` ativa o serviço avançado **Sheets** (lê todos os separadores numa só chamada; não pede
@@ -107,6 +111,7 @@ Início ("Exames" e "Total a receber") e não mexem na produção nem no €/hor
 | Faltas | Faltas e cancelamentos |
 | Planos | Planos de tratamento |
 | Exames, TiposExame | Exames (ortopantomografia, CBCT…) e o valor habitual de cada tipo |
+| FechoMes | Total da folha de honorários por mês (`mes`, `recebido_cent`) e, no histórico, produção e horas |
 
 Valores monetários em cêntimos inteiros (`60000` = €600). Datas `aaaa-mm-dd` e horas `HH:mm` guardadas como texto.
 

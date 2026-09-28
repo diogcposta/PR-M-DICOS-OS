@@ -6,8 +6,9 @@ import { TABLES } from "../../apps-script/src/server/tables";
 import { FakeSpreadsheet } from "../../apps-script/src/preview/fake-sheets";
 import { buildState } from "../../apps-script/src/client/state";
 import { exportCsv } from "../../apps-script/src/client/views/manage";
+import { applyClosings, monthFees } from "@/modules/production/domain/closing";
 import { examTotals } from "@/modules/production/domain/exams";
-import { dashboardView, profitabilityView } from "@/modules/production/domain/views";
+import { dashboardView, monthlySeries, profitabilityView } from "@/modules/production/domain/views";
 
 let spreadsheet: FakeSpreadsheet;
 let env: Env;
@@ -289,5 +290,72 @@ describe("exames (ortopantomografia, CBCT…)", () => {
     const csv = exportCsv(buildState(r.data), "exames");
     expect(csv).toMatch(/^﻿id;data;exame;case_id;valor;observacao\r\n/);
     expect(csv).toMatch(/;02\/09\/2026;CBCT;DC-2026-007;80,50;\r\n$/);
+  });
+});
+
+describe("fecho do mês (folha de honorários)", () => {
+  const procedure = { date: "2026-09-02", procedureType: "Restauração", category: "Dentisteria", billed: "70", plannedVisits: "1", start: "09:30", end: "10:15" };
+
+  it("estimativa = atos + exames; com fecho mostra o recebido e a diferença", () => {
+    call("saveDay", { date: "2026-09-02", start: "09:30", end: "19:00", breakMinutes: "120" });
+    call("createProcedure", procedure);
+    call("createExam", { date: "2026-09-02", examType: "CBCT", billed: "60" });
+    let state = buildState(call("getData").data);
+    const [sep] = monthlySeries(state.records, state.profile, "2026-09", 1);
+    const estimate = sep!.feeCents + examTotals(state.exams, "2026-09-01", "2026-09-30", state.profile.feeBps).feeCents;
+    expect(estimate).toBe(3_500 + 3_000);
+    expect(monthFees("2026-09", estimate, state.closings)).toMatchObject({ status: "estimado", receivedCents: null, differenceCents: null });
+
+    const r = call("saveClosing", { month: "2026-09", received: "80" });
+    expect(r.ok).toBe(true);
+    state = buildState(r.data);
+    expect(monthFees("2026-09", estimate, state.closings)).toMatchObject({ status: "fechado", receivedCents: 8_000, differenceCents: 1_500 });
+    // a produção e o €/h do mês continuam a vir dos registos
+    expect(applyClosings([sep!], state.closings)[0]).toMatchObject({ fromClosing: false, productionCents: 7_000 });
+  });
+
+  it("gravar o mesmo mês substitui o fecho; apagar remove-o", () => {
+    call("saveClosing", { month: "2026-08", received: "4000", production: "7500", hours: "130,5", note: "folha de agosto" });
+    const r = call("saveClosing", { month: "2026-08", received: "4200,50" });
+    expect(r.data.closings).toHaveLength(1);
+    expect(r.data.closings[0]).toMatchObject({ month: "2026-08", receivedCents: 420_050, productionCents: null, clinicalMinutes: null, note: null });
+    expect(call("deleteClosing", r.data.closings[0].id).data.closings).toEqual([]);
+  });
+
+  it("recusa mês futuro, mês inválido, total 0 e horas inválidas, com mensagem por campo", () => {
+    expect(call("saveClosing", { month: "2026-10", received: "100" }).errors.month).toMatch(/mês futuro/);
+    const bad = call("saveClosing", { month: "2026-13", received: "0", hours: "abc" });
+    expect(bad.ok).toBe(false);
+    expect(Object.keys(bad.errors)).toEqual(expect.arrayContaining(["month", "received", "hours"]));
+    expect(call("saveClosing", { month: "2026-07", received: "100", hours: "130:30" }).data.closings[0].clinicalMinutes).toBe(7_830);
+  });
+
+  it("histórico: mês sem registos usa os totais do fecho (produção, horas, €/h, honorários) e entra na variação", () => {
+    call("saveClosing", { month: "2026-08", received: "4000", production: "7500", hours: "125" });
+    call("saveDay", { date: "2026-09-02", start: "09:30", end: "19:00", breakMinutes: "120" });
+    call("createProcedure", procedure);
+    const state = buildState(call("getData").data);
+    const [aug, sep] = applyClosings(monthlySeries(state.records, state.profile, "2026-09", 2), state.closings);
+    expect(aug).toMatchObject({ fromClosing: true, productionCents: 750_000, feeCents: 400_000, clinicalMinutes: 7_500, centsPerHour: 6_000 });
+    expect(sep).toMatchObject({ fromClosing: false, productionCents: 7_000 });
+    // só o recebido, sem produção nem horas
+    call("saveClosing", { month: "2026-07", received: "3000" });
+    const [jul] = applyClosings(monthlySeries(buildState(call("getData").data).records, state.profile, "2026-07", 1), buildState(call("getData").data).closings);
+    expect(jul).toMatchObject({ fromClosing: true, productionCents: 0, feeCents: 300_000, centsPerHour: null });
+  });
+
+  it("instalação anterior sem FechoMes: separador criado ao abrir; apagar registos mantém os fechos", () => {
+    new Api(env).setup();
+    spreadsheet.sheets.delete("FechoMes");
+    expect(call("getData").data.closings).toEqual([]);
+    expect(spreadsheet.getSheetByName("FechoMes")!.rows[0]).toEqual(["id", "mes", "recebido_cent", "producao_cent", "horas_min", "nota", "atualizado_em"]);
+    call("saveClosing", { month: "2026-08", received: "4000" });
+    expect(call("clearRecords").data.closings).toHaveLength(1);
+    expect(call("loadDemo").data.closings).toHaveLength(1);
+  });
+
+  it("exportação CSV do fecho", () => {
+    const r = call("saveClosing", { month: "2026-08", received: "4000,5", production: "7500", hours: "130,5" });
+    expect(exportCsv(buildState(r.data), "fecho")).toBe("﻿mes;recebido;pago_pelos_pacientes;horas;nota\r\n2026-08;4000,50;7500,00;130,50;\r\n");
   });
 });

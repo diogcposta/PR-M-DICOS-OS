@@ -53,7 +53,7 @@ test("registo rápido no iPhone: sugestão, gravação, sobreposição recusada"
   await page.getByLabel("Categoria").selectOption("Urgência");
   await page.getByLabel("Hora de início").fill("10:00");
   await page.getByLabel("Hora de fim").fill("10:30");
-  await page.getByLabel("Valor faturado (€)").fill("45");
+  await page.getByLabel("Valor pago pelo paciente (€)").fill("45");
   await page.getByRole("button", { name: "Gravar e novo" }).click();
   await expect(page.getByText(/Sobrepõe-se a outra consulta/).first()).toBeVisible();
 });
@@ -112,7 +112,7 @@ test("definições: erro compreensível e gravação", async ({ page }) => {
   await page.getByRole("button", { name: "Gravar definições" }).click();
   await expect(page.locator("#toast")).toContainText("Definições gravadas");
   await page.getByRole("link", { name: /Início/ }).click();
-  await expect(page.getByText("Honorários (45%)")).toBeVisible();
+  await expect(page.getByText("Honorários estimados (45%)")).toBeVisible();
 });
 
 test("exames no iPhone: valor habitual, honorários à parte da produção e total a receber", async ({ page }) => {
@@ -147,4 +147,41 @@ test("exames no iPhone: valor habitual, honorários à parte da produção e tot
   await expect(page.getByTestId("card-cph-value")).toHaveText("66 €/h");
   await expect(page.getByTestId("card-exams-value")).toHaveText("€55");
   await expect(page.getByTestId("card-total-fees-value")).toHaveText("€4.364,50");
+});
+
+test("fecho do mês: recebido e diferença no Início; mês do histórico só com totais", async ({ page }) => {
+  await open(page);
+  await loadDemo(page);
+  await page.getByRole("link", { name: /Início/ }).click();
+  await expect(page.getByTestId("card-total-fees")).toContainText("Total estimado");
+  await expect(page.getByTestId("close-month")).toHaveCount(0); // setembro ainda não acabou (hoje 26/09)
+
+  await page.goto(page.url().replace(/#.*$/, "#/fecho?mes=2026-09"));
+  const form = page.getByRole("form", { name: "Fechar mês" });
+  await expect(form.getByLabel("Mês")).toHaveValue("2026-09");
+  await form.getByLabel("Total recebido (€)").fill("4400");
+  await form.getByRole("button", { name: "Gravar fecho" }).click();
+  await expect(page.locator("#toast")).toContainText("Mês fechado");
+
+  await page.getByRole("link", { name: /Início/ }).click();
+  await expect(page.getByTestId("card-total-fees")).toContainText("Recebido");
+  await expect(page.getByTestId("card-total-fees-value")).toHaveText("€4.400");
+  await expect(page.getByTestId("card-total-fees")).toContainText("diferença +€90,50");
+  await expect(page.getByTestId("card-production-value")).toHaveText("€8.619"); // a produção não muda
+
+  // histórico: março sem registos diários
+  await page.goto(page.url().replace(/#.*$/, "#/fecho?mes=2026-03"));
+  const hist = page.getByRole("form", { name: "Fechar mês" });
+  await hist.getByLabel("Total recebido (€)").fill("3000");
+  await hist.getByLabel("Valor pago pelos pacientes (€)").fill("6000");
+  await hist.getByLabel("Horas clínicas").fill("100");
+  await hist.getByRole("button", { name: "Gravar fecho" }).click();
+  await expect(page.locator("#toast")).toContainText("Mês fechado");
+  await expect(page.getByRole("region", { name: "Fechos por mês" })).toContainText("Histórico");
+
+  await page.goto(page.url().replace(/#.*$/, "#/?mes=2026-03"));
+  await expect(page.getByTestId("history-note")).toBeVisible();
+  await expect(page.getByTestId("card-production-value")).toHaveText("€6.000");
+  await expect(page.getByTestId("card-fees-value")).toHaveText("€3.000");
+  await expect(page.getByTestId("card-cph-value")).toHaveText("60 €/h");
 });

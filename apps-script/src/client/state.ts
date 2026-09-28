@@ -4,6 +4,7 @@
  * da app Next (`domain/views.ts`) — o servidor só lê, valida e grava.
  */
 import type { AppData } from "../server/api";
+import type { ClosingRecord } from "@/modules/production/domain/closing";
 import type { ExamRecord } from "@/modules/production/domain/exams";
 import type { GoalInput } from "@/modules/production/domain/goals";
 import type { ProcedureRecord, SessionRecord } from "@/modules/production/domain/metrics";
@@ -77,6 +78,8 @@ export interface State {
   /** Exames: à parte da produção clínica e do €/hora (D-059). */
   readonly exams: Exam[];
   readonly examTypes: ExamType[];
+  /** Fechos do mês (folha de honorários), por ordem de mês (D-060). */
+  readonly closings: ClosingRecord[];
   readonly records: ProductionRecords;
 }
 
@@ -186,6 +189,14 @@ export function buildState(data: AppData): State {
       .map((x) => ({ id: s(x.id), date: s(x.date), examType: s(x.examType), caseCode: ns(x.caseCode), billedCents: n(x.billedCents), note: ns(x.note), createdAt: s(x.createdAt) }))
       .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)),
     examTypes: (data.examTypes ?? []).map((t) => ({ id: s(t.id), name: s(t.name), priceCents: n(t.priceCents) })),
+    closings: (data.closings ?? []).map((c) => ({
+      id: s(c.id),
+      month: s(c.month),
+      receivedCents: n(c.receivedCents),
+      productionCents: c.productionCents === null || c.productionCents === "" ? null : n(c.productionCents),
+      clinicalMinutes: c.clinicalMinutes === null || c.clinicalMinutes === "" ? null : n(c.clinicalMinutes),
+      note: ns(c.note),
+    })),
     records: { days, procedures, sessions, absences, plans },
   };
 }

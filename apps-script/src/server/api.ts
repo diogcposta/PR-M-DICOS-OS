@@ -12,6 +12,7 @@ import { InputError } from "@/modules/production/application/parse";
 import {
   absenceSchema,
   clinicalDaySchema,
+  closingSchema,
   examSchema,
   examTypeSchema,
   fieldErrors,
@@ -61,6 +62,7 @@ export interface AppData {
   readonly plans: Row[];
   readonly exams: Row[];
   readonly examTypes: Row[];
+  readonly closings: Row[];
 }
 
 class RuleError extends Error {
@@ -136,6 +138,7 @@ export class Api {
       plans: this.db.read("plans"),
       exams: this.db.read("exams"),
       examTypes: [...this.db.read("examTypes")].sort((a, b) => String(a.name).localeCompare(String(b.name), "pt")),
+      closings: [...this.db.read("closings")].sort((a, b) => String(a.month).localeCompare(String(b.month))),
     };
   }
 
@@ -342,6 +345,32 @@ export class Api {
   }
 
   // -------------------------------------------------------------------------
+  // Fecho do mês (folha de honorários)
+  // -------------------------------------------------------------------------
+
+  /** Grava o total recebido de um mês; um só fecho por mês (gravar de novo substitui). */
+  saveClosing(form: Form): ApiResult {
+    return this.run(form, closingSchema, (c) => {
+      if (c.month > this.env.today().slice(0, 7)) throw new RuleError("Ainda não se pode fechar um mês futuro.", "month");
+      const row: Row = {
+        month: c.month,
+        receivedCents: c.received,
+        productionCents: c.production,
+        clinicalMinutes: c.hours,
+        note: c.note,
+        updatedAt: this.env.nowIso(),
+      };
+      const existing = this.db.read("closings").find((x) => x.month === c.month);
+      if (existing) this.db.update("closings", String(existing.id), { ...row, id: String(existing.id) });
+      else this.db.insert("closings", { ...row, id: this.env.newId() });
+    }, "Mês fechado.");
+  }
+
+  deleteClosing(id: string): ApiResult {
+    return this.mutate(() => void this.db.remove("closings", id), "Fecho apagado.");
+  }
+
+  // -------------------------------------------------------------------------
   // Planos
   // -------------------------------------------------------------------------
 
@@ -524,6 +553,8 @@ export const OPERATIONS = [
   "deleteExam",
   "saveExamType",
   "deleteExamType",
+  "saveClosing",
+  "deleteClosing",
   "loadDemo",
   "clearRecords",
 ] as const;
