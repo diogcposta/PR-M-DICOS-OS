@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const ROUTES = ["", "registar", "agenda", "planos", "mais", "procedimentos", "dias", "faltas", "exames", "rentabilidade", "seguros", "simulador", "tendencias", "relatorio", "definicoes", "dados"];
+const ROUTES = ["", "registar", "agenda", "planos", "mais", "procedimentos", "dias", "faltas", "exames", "fecho", "rentabilidade", "seguros", "simulador", "tendencias", "relatorio", "definicoes", "dados"];
 
 test("todas as páginas: sem scroll horizontal nem erros, com a demonstração", async ({ page }) => {
   const errors: string[] = [];

@@ -190,6 +190,8 @@ export function exportCsv(state: State, entity: string): string {
       );
     case "exames":
       return csv(["id", "data", "exame", "case_id", "valor", "observacao"], state.exams.map((x) => [x.id, ptDate(x.date), x.examType, x.caseCode, eur(x.billedCents), x.note]));
+    case "fecho":
+      return csv(["mes", "recebido", "pago_pelos_pacientes", "horas", "nota"], state.closings.map((c) => [c.month, eur(c.receivedCents), c.productionCents === null ? "" : eur(c.productionCents), c.clinicalMinutes === null ? "" : (c.clinicalMinutes / 60).toFixed(2).replace(".", ","), c.note]));
     case "faltas":
       return csv(["id", "data", "hora", "duracao_min", "procedimento_previsto", "valor_estimado", "pagador", "tipo", "slot_recuperado", "receita_recuperada"], state.absences.map((a) => [a.id, ptDate(a.date), formatTime(a.startMinute), a.durationMinutes, a.plannedProcedure, eur(a.estimatedValueCents), a.payerType, a.kind, a.slotRecovered ? "sim" : "não", eur(a.recoveredValueCents)]));
     default:
@@ -210,14 +212,15 @@ export function data(ctx: Ctx): View {
       ["faltas", "Faltas"],
       ["planos", "Planos"],
       ["exames", "Exames"],
+      ["fecho", "Fecho do mês"],
     ].map(([k, l]) => html`<button class="btn" data-export="${k}">⤓ ${l}</button>`)}</div>`, { desc: "Formato do Excel português (;, dd/mm/aaaa). Compatível com a importação da versão local." })}
     ${section("Folha Google Sheets", html`<div class="card pad"><p class="muted">Os dados estão numa folha da sua conta Google. Pode abri-la para consultar, filtrar ou descarregar (Ficheiro › Transferir › CSV). Não altere os cabeçalhos.</p><a class="btn" href="${state.raw.spreadsheetUrl}" target="_blank" rel="noopener">Abrir a folha ↗</a></div>`)}
     ${section("Demonstração", html`<div class="card pad">
       <p class="muted">Carrega dados sintéticos (setembro de 2026: €8.619 em 130,5 h). <strong>Substitui</strong> os registos atuais; as definições mantêm-se.</p>
       <div class="chips"><button class="btn" data-op="loadDemo" data-confirm="Substituir todos os registos pelos dados de demonstração?">Carregar demonstração</button>
-      <button class="btn danger" data-op="clearRecords" data-confirm="Apagar TODOS os registos (dias, procedimentos, faltas, planos, exames)? As definições mantêm-se.">Apagar todos os registos</button></div>
+      <button class="btn danger" data-op="clearRecords" data-confirm="Apagar TODOS os registos (dias, procedimentos, faltas, planos, exames)? As definições e os fechos do mês mantêm-se.">Apagar todos os registos</button></div>
     </div>`)}
-    <p class="muted small">${state.procedures.length} procedimentos · ${state.sessions.length} consultas · ${state.days.length} dias · ${state.absences.length} faltas · ${state.plans.length} planos · ${state.exams.length} exames.</p>`;
+    <p class="muted small">${state.procedures.length} procedimentos · ${state.sessions.length} consultas · ${state.days.length} dias · ${state.absences.length} faltas · ${state.plans.length} planos · ${state.exams.length} exames · ${state.closings.length} meses fechados.</p>`;
   const mount = (root: HTMLElement) =>
     root.querySelectorAll<HTMLButtonElement>("[data-export]").forEach((b) =>
       b.addEventListener("click", () => {
@@ -239,6 +242,7 @@ export function more(): View {
     ["/dias", "Dias clínicos", "Horas disponíveis por dia"],
     ["/faltas", "Faltas", "Horas e receita perdidas"],
     ["/exames", "Exames", "Ortopantomografia, CBCT… e honorários"],
+    ["/fecho", "Fecho do mês", "Total da folha de honorários e histórico"],
     ["/rentabilidade", "Rentabilidade", "Matriz, top 5, casos complexos"],
     ["/seguros", "Particular vs seguros", "Impacto das convenções"],
     ["/simulador", "What if?", "Simulador e cenários"],

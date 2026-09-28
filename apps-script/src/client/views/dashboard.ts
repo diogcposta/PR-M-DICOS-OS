@@ -1,15 +1,17 @@
 import { relativeChange } from "@/modules/kpis/domain/ratio";
+import { applyClosings } from "@/modules/production/domain/closing";
 import { examTotals } from "@/modules/production/domain/exams";
 import { EMPTY, euros, eurosPerHour, formatNumber, hours, integer, percent } from "@/modules/production/domain/format";
 import type { Funnel } from "@/modules/production/domain/plans";
 import type { Insight } from "@/modules/production/domain/insights";
 import type { ScoreResult } from "@/modules/production/domain/score";
-import { addMonths, formatMonthLong, formatMonthShort, monthRange } from "@/modules/production/domain/time";
+import { addMonths, formatMonthLong, formatMonthShort, monthOf, monthRange } from "@/modules/production/domain/time";
 import { dashboardView } from "@/modules/production/domain/views";
 
 import { stackedBars } from "../charts";
 import { badge, html, link, meter, pageTitle, section, stat, type Safe, type StatOptions, type Tone } from "../ui";
 
+import { feesOf } from "./closing";
 import { periodOf, periodPicker, type Ctx, type View } from "./types";
 
 function delta(current: number | null, previous: number | null | undefined, higherIsBetter = true): Pick<StatOptions, "delta" | "tone" | "direction"> {
@@ -60,10 +62,14 @@ export function dashboard(ctx: Ctx): View {
   const { state } = ctx;
   const period = periodOf(ctx);
   const d = dashboardView(state.records, state.profile, state.goals, period.month, state.today);
-  const c = d.current;
-  const p = d.previous;
+  // Meses sem registos com fecho (histórico) usam os totais do fecho.
+  const applied = applyClosings(d.summaries, state.closings);
+  const c = applied.at(-1)!;
+  const p = applied.at(-2) ?? null;
   const monthLabel = formatMonthLong(d.month);
   const hasData = c.procedureCount > 0 || c.workedDays > 0;
+  const fees = feesOf(state, d.current);
+  const closed = fees.status === "fechado";
   const fee = state.profile.feeBps;
   const monthExams = (m: string) => {
     const r = monthRange(m);
@@ -73,10 +79,14 @@ export function dashboard(ctx: Ctx): View {
   const exPrev = monthExams(addMonths(d.month, -1));
 
   const cards: StatOptions[] = [
-    { label: "Produção do mês", value: euros(c.productionCents, { round: true }), ...delta(c.productionCents, p?.productionCents), big: true, id: "card-production", hint: "Soma do valor faturado dos procedimentos com data no mês." },
-    { label: `Honorários (${percent(fee / 10_000, 0)})`, value: euros(c.feeCents), ...delta(c.feeCents, p?.feeCents), big: true, id: "card-fees", hint: "Produção × percentagem médica." },
+    { label: "Produção do mês", value: euros(c.productionCents, { round: true }), ...delta(c.productionCents, p?.productionCents), big: true, id: "card-production", hint: "Soma do valor pago pelos pacientes nos procedimentos com data no mês." },
+    c.fromClosing
+      ? { label: "Honorários (folha)", value: euros(c.feeCents), ...delta(c.feeCents, p?.feeCents), big: true, id: "card-fees", hint: "Total da folha de honorários do mês (histórico)." }
+      : { label: `Honorários estimados (${percent(fee / 10_000, 0)})`, value: euros(c.feeCents), ...delta(c.feeCents, p?.feeCents), big: true, id: "card-fees", hint: "Valor pago pelos pacientes × percentagem. O valor real chega na folha de honorários (Fecho do mês)." },
     { label: "Exames", value: euros(ex.feeCents), ...delta(ex.feeCents, exPrev.count ? exPrev.feeCents : null), sub: `${ex.count} ${ex.count === 1 ? "exame" : "exames"} · ${euros(ex.billedCents, { round: true })}`, id: "card-exams", hint: `Honorários dos exames (${percent(fee / 10_000, 0)} do valor). Não entram na produção nem no €/hora.` },
-    { label: "Total a receber", value: euros(c.feeCents + ex.feeCents), sub: "honorários dos atos + exames", id: "card-total-fees" },
+    closed
+      ? { label: "Recebido", value: euros(fees.receivedCents), sub: fees.differenceCents === null ? "folha de honorários" : `estimado ${euros(fees.estimatedCents)} · diferença ${fees.differenceCents > 0 ? "+" : fees.differenceCents < 0 ? "−" : ""}${euros(Math.abs(fees.differenceCents))}`, tone: fees.differenceCents !== null && fees.differenceCents < 0 ? "crit" : "good", id: "card-total-fees", hint: "Total da folha de honorários (atos e exames)." }
+      : { label: "Total estimado", value: euros(fees.estimatedCents), sub: "atos + exames · por fechar", id: "card-total-fees", hint: "Estimativa até gravar o total da folha de honorários em Mais › Fecho do mês." },
     { label: "Horas clínicas", value: hours(c.clinicalMinutes), sub: `${c.workedDays} dias${c.plannedDays ? ` · +${c.plannedDays} previstos` : ""}`, id: "card-hours", hint: "Σ (fim − início − pausa) dos dias realizados." },
     { label: "Produção por hora", value: eurosPerHour(c.centsPerHour), ...delta(c.centsPerHour, p?.centsPerHour), id: "card-cph", hint: "Produção ÷ horas clínicas." },
     { label: "Produção por dia", value: euros(c.productionPerDayCents === null ? null : Math.round(c.productionPerDayCents), { round: true }), ...delta(c.productionPerDayCents, p?.productionPerDayCents) },
@@ -136,7 +146,9 @@ export function dashboard(ctx: Ctx): View {
 
   const body = html`
     ${pageTitle("Clinical Production Dashboard", `${state.profile.name} · ${monthLabel}`, html`${periodPicker(period, false)}<a class="btn primary" href="#/registar">+ Registar</a>`)}
-    ${!hasData ? html`<div class="card pad">Sem registos em ${monthLabel}. ${link("/dias", "Registe um dia clínico")} e depois os procedimentos — ou carregue a demonstração em ${link("/dados", "Dados")}.</div>` : ""}
+    ${c.fromClosing ? html`<div class="card pad" data-testid="history-note">Mês do histórico: totais da folha de honorários, sem registos diários. ${link(`/fecho?mes=${d.month}`, "Ver fecho")}</div>` : ""}
+    ${hasData && !closed && d.month < monthOf(state.today) ? html`<p class="muted" data-testid="close-month">Já recebeu a folha de honorários de ${monthLabel}? ${link(`/fecho?mes=${d.month}`, "Fechar o mês")}</p>` : ""}
+    ${!hasData && !c.fromClosing ? html`<div class="card pad">Sem registos em ${monthLabel}. ${link("/dias", "Registe um dia clínico")} e depois os procedimentos — ou carregue a demonstração em ${link("/dados", "Dados")}.</div>` : ""}
     <section class="cards" aria-label="Indicadores do mês">${cards.map(stat)}</section>
     ${c.projectedProductionCents !== null && c.plannedDays > 0 ? html`<p class="muted" data-testid="projection">Projeção para o fim do mês (${c.plannedDays} ${c.plannedDays === 1 ? "dia previsto" : "dias previstos"}): <strong>${euros(c.projectedProductionCents, { round: true })}</strong> de produção · ${euros(Math.round((c.projectedProductionCents * fee) / 10_000), { round: true })} de honorários.</p>` : ""}
     ${section("Produção atual vs objetivos", goals, { desc: "Com as mesmas horas clínicas do mês: só muda a produção por hora." })}

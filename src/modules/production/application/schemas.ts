@@ -309,6 +309,36 @@ export const examTypeSchema = z.object({
 });
 export type ExamTypeInput = z.infer<typeof examTypeSchema>;
 
+/** Horas "130,5", "130.5" ou "130:30" → minutos; vazio → null. */
+const optionalHours = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v, ctx) => {
+    if (!v) return null;
+    const hm = /^(\d{1,4}):([0-5]\d)$/.exec(v);
+    const dec = /^\d{1,4}([.,]\d{1,2})?$/.test(v) ? Number(v.replace(",", ".")) : null;
+    const minutes = hm ? Number(hm[1]) * 60 + Number(hm[2]) : dec === null ? null : Math.round(dec * 60);
+    if (minutes === null || minutes > 744 * 60) {
+      ctx.addIssue({ code: "custom", message: "Horas inválidas (ex.: 130,5 ou 130:30)." });
+      return z.NEVER;
+    }
+    return minutes;
+  });
+
+/** Fecho do mês: total da folha de honorários (atos e exames); produção e horas só para meses sem registos. */
+export const closingSchema = z.object({
+  month: z
+    .string({ error: "Mês em falta." })
+    .trim()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mês inválido."),
+  received: money("Total recebido").refine((v) => v > 0, "Total recebido: tem de ser maior que zero."),
+  production: money("Valor pago pelos pacientes", { optional: true }).transform((v) => (v === 0 ? null : v)),
+  hours: optionalHours,
+  note: safeText("Nota"),
+});
+export type ClosingInput = z.infer<typeof closingSchema>;
+
 /** Converte FormData num objeto simples de strings (o que os esquemas esperam). */
 export function formDataToObject(formData: FormData): Record<string, string> {
   const out: Record<string, string> = {};

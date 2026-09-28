@@ -43,6 +43,18 @@ Ortopantomografias, CBCT e outros exames dos pacientes do médico, feitos na cl�
 Os exames **não** entram na produção do mês, no €/hora, nos atos nem nos objetivos: não usam tempo de cadeira do médico.
 Exemplo: CBCT €80 + ortopantomografia €30 a 50% = **€55**; com a demonstração, total a receber €4.309,50 + €55 = **€4.364,50**.
 
+## Fecho do mês (versão Apps Script)
+
+| Indicador | Fórmula |
+|---|---|
+| Honorários estimados | Valor pago pelos pacientes × percentagem (atos) + honorários dos exames |
+| Recebido | Total da folha de honorários gravado no fecho do mês (atos e exames) |
+| Diferença | Recebido − estimado (só em meses com registos) |
+| Recebido por hora | Recebido ÷ horas clínicas do mês |
+| Meses do histórico | Sem registos diários: produção, horas e €/h vêm do fecho; honorários = recebido |
+
+Exemplo (demonstração): estimado €4.309,50; folha de honorários €4.400 → diferença **+€90,50**.
+
 ## Rentabilidade
 
 | Indicador | Fórmula |

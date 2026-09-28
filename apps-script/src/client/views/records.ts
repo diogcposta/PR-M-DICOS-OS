@@ -115,7 +115,7 @@ function procedureFields(state: State, d: Draft, mode: "create" | "edit"): Safe 
     <div class="grid">
       ${mode === "create" ? field({ label: "Hora de início", name: "start", type: "time", value: d.start }) : ""}
       ${mode === "create" ? field({ label: "Hora de fim", name: "end", type: "time", value: d.end, hint: "Opcional; sem horas o €/h fica sem dados.", attrs: "data-end" }) : ""}
-      ${field({ label: "Valor faturado (€)", name: "billed", value: d.billed, required: true, inputmode: "decimal", attrs: 'placeholder="600"' })}
+      ${field({ label: "Valor pago pelo paciente (€)", name: "billed", value: d.billed, required: true, inputmode: "decimal", attrs: 'placeholder="600"', hint: "O recebido acerta-se no fecho do mês." })}
       ${field({ label: "Valor tabelado (€)", name: "listPrice", value: d.listPrice, inputmode: "decimal", hint: "Vazio = igual ao faturado." })}
       ${field({ label: "Pagador", name: "payerType", value: d.payerType, options: payerOptions })}
       ${field({ label: "Seguradora / convenção", name: "payerName", value: d.payerName, list: "dl-payers" })}
@@ -319,7 +319,7 @@ export function procedureDetail(ctx: Ctx): View {
   const body = html`
     ${pageTitle(p.procedureType, `${p.category} · ${formatCivilDate(p.date)}${p.caseCode ? ` · ${p.caseCode}` : ""}`, html`<button class="btn danger" data-op="deleteProcedure" data-id="${p.id}" data-confirm="Apagar este procedimento e todas as suas consultas?" data-next="/procedimentos">Apagar</button>`)}
     <section class="cards">
-      ${stat({ label: "Valor faturado", value: euros(p.billedCents), sub: p.listPriceCents !== p.billedCents ? `tabela ${euros(p.listPriceCents)}` : null })}
+      ${stat({ label: "Pago pelo paciente", value: euros(p.billedCents), sub: p.listPriceCents !== p.billedCents ? `tabela ${euros(p.listPriceCents)}` : null })}
       ${stat({ label: "Tempo de cadeira", value: m.chairMinutes ? duration(m.chairMinutes) : "sem dados", sub: `${m.sessionCount} de ${p.plannedVisits} consultas` })}
       ${stat({ label: "Produção por hora", value: eurosPerHour(m.centsPerHour), tone: m.lowProductivity ? "warn" : "neutral", delta: m.lowProductivity ? "abaixo do objetivo mínimo" : null, id: "proc-cph" })}
       ${stat({ label: "Produção líquida", value: euros(m.netCents), sub: "faturado − laboratório − outros" })}

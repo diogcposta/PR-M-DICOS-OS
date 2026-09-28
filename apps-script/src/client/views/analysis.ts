@@ -1,3 +1,4 @@
+import { applyClosings } from "@/modules/production/domain/closing";
 import { PAYER_LABELS, type PayerType } from "@/modules/production/domain/constants";
 import { EMPTY, duration, euros, eurosPerHour, formatNumber, hours, percent } from "@/modules/production/domain/format";
 import { sortMatrix, topAndBottom, type MatrixSort, type ProfitabilityRow } from "@/modules/production/domain/metrics";
@@ -117,11 +118,12 @@ export function insurance(ctx: Ctx): View {
 // Tendências
 // ---------------------------------------------------------------------------
 
-const METRICS: Array<{ name: string; kind: Kind; better: boolean; get: (s: MonthlySummary) => number | null }> = [
-  { name: "Produção", kind: "euros", better: true, get: (s) => s.productionCents / 100 },
-  { name: "Honorários", kind: "euros", better: true, get: (s) => s.feeCents / 100 },
-  { name: "€/hora", kind: "eurosPerHour", better: true, get: (s) => (s.centsPerHour === null ? null : s.centsPerHour / 100) },
-  { name: "Horas trabalhadas", kind: "hours", better: true, get: (s) => s.clinicalMinutes / 60 },
+/** `history`: também nos meses só com fecho (histórico); `closing`: só existe onde há fecho. */
+const METRICS: Array<{ name: string; kind: Kind; better: boolean; get: (s: MonthlySummary) => number | null; history?: boolean; closing?: boolean }> = [
+  { name: "Produção", kind: "euros", better: true, get: (s) => s.productionCents / 100, history: true },
+  { name: "Honorários", kind: "euros", better: true, get: (s) => s.feeCents / 100, history: true },
+  { name: "€/hora", kind: "eurosPerHour", better: true, get: (s) => (s.centsPerHour === null ? null : s.centsPerHour / 100), history: true },
+  { name: "Horas trabalhadas", kind: "hours", better: true, get: (s) => s.clinicalMinutes / 60, history: true },
   { name: "Produção por dia", kind: "euros", better: true, get: (s) => (s.productionPerDayCents === null ? null : s.productionPerDayCents / 100) },
   { name: "Faltas", kind: "count", better: false, get: (s) => s.absences.missedCount },
   { name: "Receita perdida", kind: "euros", better: false, get: (s) => s.absences.netLostCents / 100 },
@@ -133,12 +135,20 @@ const METRICS: Array<{ name: string; kind: Kind; better: boolean; get: (s: Month
 export function trends(ctx: Ctx): View {
   const { state } = ctx;
   const period = periodOf(ctx);
-  const summaries = monthlySeries(state.records, state.profile, period.month, 12);
+  const recorded = monthlySeries(state.records, state.profile, period.month, 12);
+  // Meses do histórico (só com fecho) contam para produção, honorários, €/h e horas.
+  const summaries = applyClosings(recorded, state.closings);
+  const received = new Map(state.closings.map((c) => [c.month, c.receivedCents / 100]));
+  const metrics: typeof METRICS = [
+    ...METRICS.slice(0, 2),
+    { name: "Recebido (folha de honorários)", kind: "euros", better: true, get: (s) => received.get(s.month) ?? null, closing: true },
+    ...METRICS.slice(2),
+  ];
   const labels = summaries.map((s) => formatMonthShort(s.month));
   const body = html`
     ${pageTitle("Tendências", `12 meses até ${formatMonthLong(period.month)}. Mês vs anterior e média móvel de 3 meses.`, periodPicker(period, false))}
-    <div class="grid-cards">${METRICS.map((m) => {
-      const values = summaries.map((s) => (s.workedDays > 0 || s.procedureCount > 0 ? m.get(s) : null));
+    <div class="grid-cards">${metrics.map((m) => {
+      const values = summaries.map((s) => (m.closing || s.workedDays > 0 || s.procedureCount > 0 || (s.fromClosing && m.history) ? m.get(s) : null));
       const avg = movingAverage(values);
       const c = compareLast(values);
       const good = c.change === null ? null : c.change > 0 === m.better;
