@@ -115,6 +115,7 @@ function procedureFields(state: State, d: Draft, mode: "create" | "edit"): Safe 
     <div class="grid">
       ${mode === "create" ? field({ label: "Hora de início", name: "start", type: "time", value: d.start }) : ""}
       ${mode === "create" ? field({ label: "Hora de fim", name: "end", type: "time", value: d.end, hint: "Opcional; sem horas o €/h fica sem dados.", attrs: "data-end" }) : ""}
+      ${mode === "create" ? html`<div class="field"><button type="button" class="btn small" data-clear-times>Sem horas</button><p class="hint-text">Limpa as horas (no iPhone não se consegue apagar uma hora). Para totais sem detalhe.</p></div>` : ""}
       ${field({ label: "Valor pago pelo paciente (€)", name: "billed", value: d.billed, required: true, inputmode: "decimal", attrs: 'placeholder="600"', hint: "O recebido acerta-se no fecho do mês." })}
       ${field({ label: "Valor tabelado (€)", name: "listPrice", value: d.listPrice, inputmode: "decimal", hint: "Vazio = igual ao faturado." })}
       ${field({ label: "Pagador", name: "payerType", value: d.payerType, options: payerOptions })}
@@ -219,6 +220,11 @@ function mountProcedureForm(form: HTMLFormElement, ctx: Ctx, suggestions: readon
   input("payerType")?.addEventListener("change", syncPayer);
   input("start")?.addEventListener("change", showDuration);
   input("end")?.addEventListener("change", showDuration);
+  form.querySelector<HTMLButtonElement>("[data-clear-times]")?.addEventListener("click", () => {
+    set("start", "");
+    set("end", "");
+    showDuration();
+  });
   syncPayer();
 
   form.addEventListener("keydown", (e) => {
