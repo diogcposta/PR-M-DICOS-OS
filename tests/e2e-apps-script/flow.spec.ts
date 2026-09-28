@@ -185,3 +185,19 @@ test("fecho do mês: recebido e diferença no Início; mês do histórico só co
   await expect(page.getByTestId("card-fees-value")).toHaveText("€3.000");
   await expect(page.getByTestId("card-cph-value")).toHaveText("60 €/h");
 });
+
+test("«Sem horas» limpa as horas: registo de um total sem tempo de cadeira", async ({ page }) => {
+  await open(page, "registar?data=2026-09-26");
+  await expect(page.getByLabel("Hora de início")).not.toHaveValue("");
+  await page.getByLabel("Procedimento", { exact: true }).fill("Produção 1–26 set. (total, sem detalhe)");
+  await page.getByLabel("Categoria").selectOption("Outro");
+  await page.getByRole("button", { name: "Sem horas" }).click();
+  await expect(page.getByLabel("Hora de início")).toHaveValue("");
+  await expect(page.getByLabel("Hora de fim")).toHaveValue("");
+  await page.getByLabel("Valor pago pelo paciente (€)").fill("8848");
+  await page.getByRole("button", { name: "Gravar e novo" }).click();
+  await expect(page.locator("#toast")).toContainText("Procedimento registado");
+  await page.getByRole("link", { name: /Início/ }).click();
+  await expect(page.getByTestId("card-production-value")).toHaveText("€8.848");
+  await expect(page.getByTestId("card-cph-value")).toHaveText("sem dados");
+});
